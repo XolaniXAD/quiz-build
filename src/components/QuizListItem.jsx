@@ -21,8 +21,8 @@ export default function QuizListItem({ quiz, onEdit, onDelete, onDuplicate }) {
         {quiz.published ? 'Published' : 'Draft'}
       </span>
 
-      {/* Actions — visible on hover */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Actions — always visible on mobile, hover on desktop */}
+      <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
         <button
           onClick={() => onEdit(quiz)}
           className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-primary-container bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"

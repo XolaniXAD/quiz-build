@@ -24,11 +24,12 @@ const STATS = [
 ]
 
 export default function DashboardPage({ onEditQuiz, onNavigate }) {
-  const [quizzes, setQuizzes]     = useState(MOCK_QUIZZES)
-  const [viewMode, setViewMode]   = useState('card')      // 'card' | 'list'
-  const [search, setSearch]       = useState('')
-  const [filter, setFilter]       = useState('all')       // 'all' | 'published' | 'draft'
-  const [deleteTarget, setDeleteTarget] = useState(null)  // quiz to confirm delete
+  const [quizzes, setQuizzes]         = useState(MOCK_QUIZZES)
+  const [viewMode, setViewMode]       = useState('card')
+  const [search, setSearch]           = useState('')
+  const [filter, setFilter]           = useState('all')
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   const filtered = quizzes.filter((q) => {
     const matchSearch = q.title.toLowerCase().includes(search.toLowerCase())
@@ -53,10 +54,10 @@ export default function DashboardPage({ onEditQuiz, onNavigate }) {
 
   return (
     <div className="font-body-md text-on-background">
-      <TopBar />
-      <SideNav activePage="dashboard" onNavigate={onNavigate} />
+      <TopBar onMenuToggle={() => setMobileNavOpen((v) => !v)} onNavigate={onNavigate} />
+      <SideNav activePage="dashboard" onNavigate={onNavigate} isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
 
-      <main className="ml-64 mt-16 min-h-[calc(100vh-64px)] pb-20 px-8 py-8">
+      <main className="md:ml-64 mt-16 min-h-[calc(100vh-64px)] pb-20 px-4 md:px-8 py-6 md:py-8">
 
         {/* ── Page header ─────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
@@ -89,9 +90,9 @@ export default function DashboardPage({ onEditQuiz, onNavigate }) {
         </div>
 
         {/* ── Toolbar: search + filter + view toggle ──────────── */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-5">
-          {/* Search */}
-          <div className="relative w-full sm:w-72">
+        <div className="flex flex-col gap-3 mb-5">
+          {/* Search — full width on mobile */}
+          <div className="relative w-full">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">
               search
             </span>
@@ -100,18 +101,19 @@ export default function DashboardPage({ onEditQuiz, onNavigate }) {
               placeholder="Search quizzes…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary-container/40"
+              className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary-container/40"
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Filter + view toggle row */}
+          <div className="flex items-center justify-between gap-2">
             {/* Filter tabs */}
-            <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-1 text-sm font-medium">
+            <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-0.5 text-sm font-medium flex-1 sm:flex-none">
               {[['all', 'All'], ['published', 'Published'], ['draft', 'Drafts']].map(([val, label]) => (
                 <button
                   key={val}
                   onClick={() => setFilter(val)}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${
+                  className={`flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 rounded-lg transition-all text-xs sm:text-sm ${
                     filter === val
                       ? 'bg-white text-slate-900 shadow-sm'
                       : 'text-slate-500 hover:text-slate-700'
