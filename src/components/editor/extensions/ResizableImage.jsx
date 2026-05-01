@@ -5,45 +5,63 @@ import { createPortal } from 'react-dom'
 import { useEditorContext } from '../EditorContext'
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  ResizeOverlay — rendered into document.body via createPortal.
-//  Completely outside ProseMirror's DOM. PM never intercepts these events.
+//  ResizeOverlay — portal into document.body, OUTSIDE ProseMirror's DOM.
+//  PM registers native listeners on .ProseMirror. Events here never reach PM.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DIRS = ['nw','n','ne','e','se','s','sw','w']
-const CURSORS = { nw:'nw-resize', n:'n-resize', ne:'ne-resize', e:'e-resize', se:'se-resize', s:'s-resize', sw:'sw-resize', w:'w-resize' }
+const DIRS    = ['nw','n','ne','e','se','s','sw','w']
+const CURSORS = { nw:'nw-resize', n:'n-resize', ne:'ne-resize', e:'e-resize',
+                  se:'se-resize', s:'s-resize', sw:'sw-resize', w:'w-resize' }
 
-function getHandlePos(dir, rect) {
-  const { left: x, top: y, width: w, height: h } = rect
-  const mx = x + w/2 - 7, my = y + h/2 - 7, r = x + w - 7, b = y + h - 7
-  return { nw:{left:x-7,top:y-7}, n:{left:mx,top:y-7}, ne:{left:r,top:y-7}, e:{left:r,top:my},
-           se:{left:r,top:b}, s:{left:mx,top:b}, sw:{left:x-7,top:b}, w:{left:x-7,top:my} }[dir]
+function getHandleXY(dir, r) {
+  const cx = r.left + r.width  / 2 - 7
+  const cy = r.top  + r.height / 2 - 7
+  const rx = r.left + r.width  - 7
+  const by = r.top  + r.height - 7
+  return {
+    nw: { left: r.left - 7, top: r.top - 7 },
+    n:  { left: cx,          top: r.top - 7 },
+    ne: { left: rx,          top: r.top - 7 },
+    e:  { left: rx,          top: cy        },
+    se: { left: rx,          top: by        },
+    s:  { left: cx,          top: by        },
+    sw: { left: r.left - 7,  top: by        },
+    w:  { left: r.left - 7,  top: cy        },
+  }[dir]
 }
 
 function ResizeOverlay({ imgEl, onResize }) {
   const [rect, setRect] = useState(null)
+  const rafRef = useRef(null)
 
   useEffect(() => {
-    let raf
+    if (!imgEl) return
     function tick() {
-      if (!imgEl) return
       const r = imgEl.getBoundingClientRect()
-      setRect({ left: r.left, top: r.top, width: r.width, height: r.height })
-      raf = requestAnimationFrame(tick)
+      setRect(prev => {
+        if (prev && prev.left===r.left && prev.top===r.top && prev.width===r.width && prev.height===r.height) return prev
+        return { left: r.left, top: r.top, width: r.width, height: r.height }
+      })
+      rafRef.current = requestAnimationFrame(tick)
     }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
+    rafRef.current = requestAnimationFrame(tick)
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
   }, [imgEl])
 
-  const startResize = useCallback((e, dir) => {
+  function handleMouseDown(e, dir) {
     e.preventDefault()
     e.stopPropagation()
+
+    const container = imgEl.parentElement
+    const r      = imgEl.getBoundingClientRect()
     const startX = e.clientX, startY = e.clientY
-    const r = imgEl.getBoundingClientRect()
-    const startW = r.width, startH = r.height
-    const ar = startH > 0 ? startW / startH : 1
+    const startW = r.width,   startH = r.height
+    const ar     = startH > 0 ? startW / startH : 1
     const corner = dir.length === 2
 
-    function onMove(ev) {
+    let lastW = startW, lastH = startH
+
+    function calc(ev) {
       const dx = ev.clientX - startX, dy = ev.clientY - startY
       let nW = startW, nH = startH
       if (dir.includes('e')) nW = Math.max(40, startW + dx)
@@ -54,15 +72,31 @@ function ResizeOverlay({ imgEl, onResize }) {
         if (Math.abs(dx) >= Math.abs(dy)) nH = Math.round(nW / ar)
         else nW = Math.round(nH * ar)
       }
-      onResize(Math.round(nW), Math.round(nH))
+      return [Math.round(nW), Math.round(nH)]
     }
+
+    function onMove(ev) {
+      const [nW, nH] = calc(ev)
+      lastW = nW; lastH = nH
+      // ── Direct DOM manipulation — zero React/PM overhead during drag ──
+      imgEl.style.width      = nW + 'px'
+      imgEl.style.height     = nH + 'px'
+      if (container) {
+        container.style.width  = nW + 'px'
+        container.style.height = nH + 'px'
+      }
+    }
+
     function onUp() {
       window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('mouseup',   onUp)
+      // ── Commit final size to TipTap once, after drag ends ──
+      onResize(lastW, lastH)
     }
+
     window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [imgEl, onResize])
+    window.addEventListener('mouseup',   onUp)
+  }
 
   if (!rect) return null
 
@@ -71,9 +105,9 @@ function ResizeOverlay({ imgEl, onResize }) {
       <div style={{ position:'fixed', left:rect.left-2, top:rect.top-2, width:rect.width+4, height:rect.height+4,
                     border:'2px solid #2463eb', borderRadius:2, pointerEvents:'none', zIndex:99998 }} />
       {DIRS.map(dir => {
-        const pos = getHandlePos(dir, rect)
+        const pos = getHandleXY(dir, rect)
         return (
-          <div key={dir} onMouseDown={(e) => startResize(e, dir)}
+          <div key={dir} onMouseDown={(e) => handleMouseDown(e, dir)}
             style={{ position:'fixed', left:pos.left, top:pos.top, width:14, height:14,
                      background:'white', border:'2px solid #2463eb', borderRadius:3,
                      cursor:CURSORS[dir], zIndex:99999, boxShadow:'0 1px 6px rgba(0,0,0,0.35)' }} />
@@ -85,9 +119,6 @@ function ResizeOverlay({ imgEl, onResize }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Wrap modes toolbar config
-// ─────────────────────────────────────────────────────────────────────────────
-
 const WRAP_MODES = [
   { mode:'inline',  icon:'format_image_right', label:'Inline with text' },
   { mode:'left',    icon:'format_align_left',  label:'Float left' },
@@ -98,16 +129,16 @@ const WRAP_MODES = [
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  NodeView — only the <img> + toolbar + context menu live in PM's DOM.
-//  Resize handles are portal'd into document.body — PM can't interfere.
-// ─────────────────────────────────────────────────────────────────────────────
-
 function ResizableImageView({ node, updateAttributes, deleteNode, selected }) {
   const { onCropRequest } = useEditorContext()
   const [hover,       setHover]       = useState(false)
   const [contextMenu, setContextMenu] = useState(null)
-  const imgRef     = useRef(null)
-  const mountedRef = useRef(true)
+  const imgRef          = useRef(null)
+  const mountedRef      = useRef(true)
+  // Always-fresh ref — avoids stale updateAttributes captured in drag closures
+  const updateAttrsRef  = useRef(updateAttributes)
+  updateAttrsRef.current = updateAttributes
+
   useEffect(() => () => { mountedRef.current = false }, [])
 
   useEffect(() => {
@@ -121,13 +152,17 @@ function ResizableImageView({ node, updateAttributes, deleteNode, selected }) {
 
   function onImgLoad(e) {
     if (!node.attrs.width && !node.attrs.height) {
-      updateAttributes({ width:`${e.currentTarget.naturalWidth}px`, height:`${e.currentTarget.naturalHeight}px` })
+      const el = e.currentTarget
+      updateAttributes({ width:`${el.offsetWidth}px`, height:`${el.offsetHeight}px` })
     }
   }
 
+  // Stable callback — always calls the freshest updateAttributes via ref
   const handleResize = useCallback((w, h) => {
-    if (mountedRef.current) updateAttributes({ width:`${w}px`, height:`${h}px` })
-  }, [updateAttributes])
+    if (mountedRef.current) {
+      updateAttrsRef.current({ width:`${w}px`, height:`${h}px` })
+    }
+  }, [])
 
   function startDrag(e) {
     if (wrapMode !== 'inFront' && wrapMode !== 'behind') return
@@ -143,12 +178,12 @@ function ResizableImageView({ node, updateAttributes, deleteNode, selected }) {
 
   function handleContextMenu(e) {
     e.preventDefault(); e.stopPropagation()
-    setContextMenu({ x: Math.min(e.clientX, window.innerWidth-220), y: Math.min(e.clientY, window.innerHeight-100) })
+    setContextMenu({ x:Math.min(e.clientX,window.innerWidth-220), y:Math.min(e.clientY,window.innerHeight-100) })
   }
 
   function handleCrop(e) {
     e.stopPropagation(); setContextMenu(null)
-    if (onCropRequest) onCropRequest({ src, onComplete:(newSrc) => updateAttributes({ src:newSrc, width:null, height:null }) })
+    if (onCropRequest) onCropRequest({ src, onComplete:(newSrc)=>updateAttributes({ src:newSrc, width:null, height:null }) })
   }
 
   function handleDelete(e) { e.stopPropagation(); setContextMenu(null); deleteNode() }
@@ -158,7 +193,6 @@ function ResizableImageView({ node, updateAttributes, deleteNode, selected }) {
     position:      isAbsolute ? 'absolute' : 'relative',
     display:       (!isAbsolute && wrapMode !== 'center') ? 'inline-block' : 'block',
     userSelect:    'none',
-    maxWidth:      '100%',
     verticalAlign: !isAbsolute ? 'bottom' : undefined,
     borderRadius:  2,
     cursor:        isAbsolute ? 'move' : 'default',
@@ -184,9 +218,9 @@ function ResizableImageView({ node, updateAttributes, deleteNode, selected }) {
         onMouseDown={isAbsolute ? startDrag : undefined}
       >
         <img ref={imgRef} src={src} alt={alt||''} draggable={false} crossOrigin="anonymous" onLoad={onImgLoad}
-          style={{ display:'block', width:width||'auto', height:height||'auto', maxWidth:'100%' }} />
+          style={{ display:'block', width:width||'auto', height:height||'auto', maxWidth:'100%', pointerEvents:'none' }} />
 
-        {/* Portal resize overlay — document.body, outside ProseMirror */}
+        {/* Portal resize overlay — document.body, invisible to ProseMirror */}
         {showOverlay && imgRef.current && (
           <ResizeOverlay imgEl={imgRef.current} onResize={handleResize} />
         )}
@@ -239,30 +273,19 @@ function CtxItem({ icon, label, onClick, danger }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  TipTap extension
-// ─────────────────────────────────────────────────────────────────────────────
-
 export const ResizableImage = Node.create({
-  name: 'resizableImage',
-  group: 'inline',
-  inline: true,
-  selectable: true,
-  draggable: false,
-  atom: true,
+  name:'resizableImage', group:'inline', inline:true,
+  selectable:true, draggable:false, atom:true,
 
   addAttributes() {
     return {
-      src:      { default: null },
-      alt:      { default: null },
-      width:    { default: null },
-      height:   { default: null },
-      wrapMode: { default: 'inline' },
-      posX:     { default: 0 },
-      posY:     { default: 0 },
+      src:{ default:null }, alt:{ default:null },
+      width:{ default:null }, height:{ default:null },
+      wrapMode:{ default:'inline' }, posX:{ default:0 }, posY:{ default:0 },
     }
   },
 
-  parseHTML()  { return [{ tag: 'img[src]' }] },
+  parseHTML()  { return [{ tag:'img[src]' }] },
   renderHTML({ HTMLAttributes }) { return ['img', mergeAttributes(HTMLAttributes)] },
   addNodeView() { return ReactNodeViewRenderer(ResizableImageView) },
 })
