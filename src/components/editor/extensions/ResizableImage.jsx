@@ -31,17 +31,44 @@ function getHandleXY(dir, r) {
 }
 
 function ResizeOverlay({ imgEl, onResize }) {
-  const [rect, setRect] = useState(null)
+  const [state, setState] = useState(null) // { rect, visTop, visBottom }
   const rafRef = useRef(null)
 
   useEffect(() => {
     if (!imgEl) return
+
+    // Walk up to find the scrollable editor container — its top edge is
+    // exactly where the navbar ends and content begins.
+    function getScrollParent(el) {
+      let node = el.parentElement
+      while (node && node !== document.documentElement) {
+        const { overflow, overflowY } = window.getComputedStyle(node)
+        if (/auto|scroll/.test(overflow + overflowY)) return node
+        node = node.parentElement
+      }
+      return document.documentElement
+    }
+    const scrollParent = getScrollParent(imgEl)
+
     function tick() {
-      const r = imgEl.getBoundingClientRect()
-      setRect(prev => {
-        if (prev && prev.left===r.left && prev.top===r.top && prev.width===r.width && prev.height===r.height) return prev
-        return { left: r.left, top: r.top, width: r.width, height: r.height }
-      })
+      const r  = imgEl.getBoundingClientRect()
+      const sr = scrollParent.getBoundingClientRect()
+      const visTop    = Math.max(0, sr.top)
+      const visBottom = Math.min(window.innerHeight, sr.bottom)
+
+      // Completely outside visible editor area — hide
+      if (r.bottom < visTop || r.top > visBottom ||
+          r.right  < 0     || r.left > window.innerWidth) {
+        setState(null)
+      } else {
+        setState(prev => {
+          if (prev &&
+              prev.rect.left === r.left && prev.rect.top  === r.top &&
+              prev.rect.width === r.width && prev.rect.height === r.height &&
+              prev.visTop === visTop && prev.visBottom === visBottom) return prev
+          return { rect: { left: r.left, top: r.top, width: r.width, height: r.height }, visTop, visBottom }
+        })
+      }
       rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
@@ -98,14 +125,26 @@ function ResizeOverlay({ imgEl, onResize }) {
     window.addEventListener('mouseup',   onUp)
   }
 
-  if (!rect) return null
+  if (!state) return null
+  const { rect, visTop, visBottom } = state
+
+  // Clamp the outline box so it never bleeds above the editor container
+  const outTop    = Math.max(rect.top - 2, visTop)
+  const outBottom = Math.min(rect.top + rect.height + 2, visBottom)
+  const outH      = Math.max(0, outBottom - outTop)
 
   return createPortal(
     <>
-      <div style={{ position:'fixed', left:rect.left-2, top:rect.top-2, width:rect.width+4, height:rect.height+4,
-                    border:'2px solid #2463eb', borderRadius:2, pointerEvents:'none', zIndex:99998 }} />
+      {outH > 0 && (
+        <div style={{ position:'fixed', left:rect.left-2, top:outTop,
+                      width:rect.width+4, height:outH,
+                      border:'2px solid #2463eb', borderRadius:2,
+                      pointerEvents:'none', zIndex:99998 }} />
+      )}
       {DIRS.map(dir => {
         const pos = getHandleXY(dir, rect)
+        // Hide handles that sit above the visible editor area (behind navbar)
+        if (pos.top < visTop - 7 || pos.top > visBottom) return null
         return (
           <div key={dir} onMouseDown={(e) => handleMouseDown(e, dir)}
             style={{ position:'fixed', left:pos.left, top:pos.top, width:14, height:14,
@@ -129,7 +168,7 @@ const WRAP_MODES = [
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
-function ResizableImageView({ node, updateAttributes, deleteNode, selected }) {
+function ResizableImageView({ node, updateAttributes, deleteNode, selected, editor, getPos }) {
   const { onCropRequest } = useEditorContext()
   const [hover,       setHover]       = useState(false)
   const [contextMenu, setContextMenu] = useState(null)
@@ -165,15 +204,36 @@ function ResizableImageView({ node, updateAttributes, deleteNode, selected }) {
   }, [])
 
   function startDrag(e) {
-    if (wrapMode !== 'inFront' && wrapMode !== 'behind') return
     e.preventDefault(); e.stopPropagation()
     const startX = e.clientX, startY = e.clientY, origX = posX, origY = posY
+    const imgDom = imgRef.current
+    let lastX = origX, lastY = origY
     function onMove(ev) {
-      if (!mountedRef.current) return
-      updateAttributes({ posX: origX+(ev.clientX-startX), posY: origY+(ev.clientY-startY) })
+      lastX = origX + (ev.clientX - startX)
+      lastY = origY + (ev.clientY - startY)
+      // Direct DOM for smooth visual feedback during drag
+      if (imgDom) { imgDom.style.left = lastX + 'px'; imgDom.style.top = lastY + 'px' }
     }
-    function onUp() { window.removeEventListener('mousemove',onMove); window.removeEventListener('mouseup',onUp) }
+    function onUp() {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      if (mountedRef.current) updateAttrsRef.current({ posX: lastX, posY: lastY })
+    }
     window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp)
+  }
+
+  function insertParagraph(before) {
+    const pos = getPos()
+    const $pos = editor.state.doc.resolve(pos)
+    let d = $pos.depth
+    while (d > 0 && !$pos.node(d).type.isBlock) d--
+    if (before) {
+      const at = $pos.before(d)
+      editor.chain().insertContentAt(at, { type: 'paragraph' }).setTextSelection(at + 1).run()
+    } else {
+      const at = $pos.after(d)
+      editor.chain().insertContentAt(at, { type: 'paragraph' }).setTextSelection(at + 1).run()
+    }
   }
 
   function handleContextMenu(e) {
@@ -189,36 +249,44 @@ function ResizableImageView({ node, updateAttributes, deleteNode, selected }) {
   function handleDelete(e) { e.stopPropagation(); setContextMenu(null); deleteNode() }
 
   const isAbsolute = wrapMode === 'inFront' || wrapMode === 'behind'
-  const containerStyle = {
-    position:      isAbsolute ? 'absolute' : 'relative',
-    display:       (!isAbsolute && wrapMode !== 'center') ? 'inline-block' : 'block',
-    userSelect:    'none',
-    verticalAlign: !isAbsolute ? 'bottom' : undefined,
-    borderRadius:  2,
-    cursor:        isAbsolute ? 'move' : 'default',
-    zIndex:        wrapMode === 'inFront' ? 10 : wrapMode === 'behind' ? -1 : 'auto',
-    left: isAbsolute ? posX : undefined, top: isAbsolute ? posY : undefined,
-    float:       wrapMode === 'left' ? 'left' : wrapMode === 'right' ? 'right' : 'none',
-    marginRight: wrapMode === 'left'   ? '1em' : undefined,
-    marginLeft:  wrapMode === 'right'  ? '1em' : wrapMode === 'center' ? 'auto' : undefined,
-    marginBottom:(wrapMode==='left'||wrapMode==='right'||wrapMode==='center') ? '0.5em' : undefined,
-    marginTop:   wrapMode === 'center' ? '0.5em' : undefined,
-  }
-  if (width)                       containerStyle.width  = width
-  if (height && height !== 'auto') containerStyle.height = height
+
+  // inFront/behind: zero-size inline anchor — text flows normally, image floats over/behind
+  const containerStyle = isAbsolute
+    ? { display:'inline-block', position:'relative', width:0, height:0, overflow:'visible',
+        userSelect:'none', verticalAlign:'bottom' }
+    : { position:'relative',
+        display: wrapMode !== 'center' ? 'inline-block' : 'block',
+        userSelect:'none', maxWidth:'100%', verticalAlign:'bottom', borderRadius:2,
+        float:       wrapMode==='left' ? 'left' : wrapMode==='right' ? 'right' : 'none',
+        marginRight: wrapMode==='left'   ? '1em' : undefined,
+        marginLeft:  wrapMode==='right'  ? '1em' : wrapMode==='center' ? 'auto' : undefined,
+        marginBottom:(wrapMode==='left'||wrapMode==='right'||wrapMode==='center') ? '0.5em' : undefined,
+        marginTop:    wrapMode==='center' ? '0.5em' : undefined,
+        width:  width   || undefined,
+        height: (height && height !== 'auto') ? height : undefined,
+      }
+
+  const imgStyle = isAbsolute
+    ? { display:'block', position:'absolute', left:posX, top:posY,
+        width:width||'auto', height:height||'auto',
+        zIndex: wrapMode==='inFront' ? 10 : -1, cursor:'move', userSelect:'none' }
+    : { display:'block', width:width||'auto', height:height||'auto', maxWidth:'100%', pointerEvents:'none' }
 
   const showOverlay = selected || hover
 
   return (
     <NodeViewWrapper as="span" style={{ display:'contents' }}>
       <span contentEditable={false} style={containerStyle}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
-        onContextMenu={handleContextMenu}
-        onMouseDown={isAbsolute ? startDrag : undefined}
+        onMouseEnter={!isAbsolute ? () => setHover(true)  : undefined}
+        onMouseLeave={!isAbsolute ? () => setHover(false) : undefined}
+        onContextMenu={!isAbsolute ? handleContextMenu : undefined}
       >
         <img ref={imgRef} src={src} alt={alt||''} draggable={false} crossOrigin="anonymous" onLoad={onImgLoad}
-          style={{ display:'block', width:width||'auto', height:height||'auto', maxWidth:'100%', pointerEvents:'none' }} />
+          onMouseEnter={isAbsolute ? () => setHover(true)  : undefined}
+          onMouseLeave={isAbsolute ? () => setHover(false) : undefined}
+          onMouseDown={isAbsolute ? startDrag : undefined}
+          onContextMenu={isAbsolute ? handleContextMenu : undefined}
+          style={imgStyle} />
 
         {/* Portal resize overlay — document.body, invisible to ProseMirror */}
         {showOverlay && imgRef.current && (
@@ -228,7 +296,7 @@ function ResizableImageView({ node, updateAttributes, deleteNode, selected }) {
         {/* Wrap mode toolbar */}
         {selected && (
           <span style={{ position:'absolute', top:-48, left:'50%', transform:'translateX(-50%)',
-            background:'#1e293b', borderRadius:10, padding:'4px 6px', display:'inline-flex',
+            background:'#1e293b', borderRadius:10, padding:'4px 6px', display:'inline-flex', alignItems:'center',
             gap:2, zIndex:30, boxShadow:'0 4px 14px rgba(0,0,0,0.35)', whiteSpace:'nowrap', pointerEvents:'all' }}>
             {WRAP_MODES.map(({ mode, icon, label }) => (
               <button key={mode} title={label}
@@ -238,6 +306,19 @@ function ResizableImageView({ node, updateAttributes, deleteNode, selected }) {
                 <span className="material-symbols-outlined" style={{ fontSize:17 }}>{icon}</span>
               </button>
             ))}
+            {!isAbsolute && <>
+              <span style={{ width:1, height:20, background:'rgba(255,255,255,0.2)', margin:'0 3px' }} />
+              <button title="Insert paragraph above"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); insertParagraph(true) }}
+                style={{ background:'transparent', border:'none', color:'white', padding:'5px 7px', borderRadius:7, cursor:'pointer', display:'flex', alignItems:'center', fontSize:0 }}>
+                <span className="material-symbols-outlined" style={{ fontSize:17 }}>vertical_align_top</span>
+              </button>
+              <button title="Insert paragraph below"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); insertParagraph(false) }}
+                style={{ background:'transparent', border:'none', color:'white', padding:'5px 7px', borderRadius:7, cursor:'pointer', display:'flex', alignItems:'center', fontSize:0 }}>
+                <span className="material-symbols-outlined" style={{ fontSize:17 }}>vertical_align_bottom</span>
+              </button>
+            </>}
           </span>
         )}
 
