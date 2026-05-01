@@ -1,3 +1,5 @@
+import RichTextEditor from './editor/RichTextEditor'
+
 const TYPE_META = {
   multiple_choice: { label: 'Multiple Choice',     icon: 'radio_button_checked',  iconColor: 'text-blue-500',   accentBar: 'bg-blue-500'   },
   checkbox:        { label: 'Checkbox',             icon: 'check_box',             iconColor: 'text-violet-500', accentBar: 'bg-violet-500' },
@@ -6,7 +8,7 @@ const TYPE_META = {
   dropdown:        { label: 'Dropdown',             icon: 'arrow_drop_down_circle',iconColor: 'text-rose-500',   accentBar: 'bg-rose-500'   },
 }
 
-export default function QuestionCard({ question, index, onDelete }) {
+export default function QuestionCard({ question, index, onDelete, onSaveContent }) {
   const meta = TYPE_META[question.type] ?? { label: 'Question', icon: 'quiz', iconColor: 'text-slate-400', accentBar: 'bg-slate-300' }
 
   return (
@@ -18,14 +20,12 @@ export default function QuestionCard({ question, index, onDelete }) {
         {/* Card header */}
         <div className="flex items-center justify-between px-5 md:px-6 pt-4 pb-3">
           <div className="flex items-center gap-2">
-            {/* Question number badge */}
             <span className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 text-xs font-bold flex items-center justify-center flex-shrink-0">
               {index + 1}
             </span>
             <span className={`material-symbols-outlined text-lg ${meta.iconColor}`}>{meta.icon}</span>
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{meta.label}</span>
           </div>
-
           <button
             onClick={() => onDelete(question.id)}
             className="p-2 rounded-xl text-slate-300 hover:bg-red-50 hover:text-red-400 transition-colors"
@@ -38,15 +38,24 @@ export default function QuestionCard({ question, index, onDelete }) {
         {/* Divider */}
         <div className="mx-5 md:mx-6 h-px bg-slate-100" />
 
-        {/* Question textarea */}
+        {/* Rich text editor */}
         <div className="px-5 md:px-6 py-4">
-          <textarea
-            placeholder="Type your question here…"
-            rows={4}
-            className="w-full resize-none text-base text-slate-800 placeholder-slate-300 border-0 outline-none bg-transparent leading-relaxed"
+          <RichTextEditor
+            questionId={question.id}
+            initialContent={question.content || ''}
+            onSave={onSaveContent ? (content) => onSaveContent(question.id, content) : undefined}
           />
+        </div>
+
+        {/* Options placeholder section */}
+        <div className="mx-5 md:mx-6 mb-5 rounded-xl border-2 border-dashed border-slate-200 px-5 py-4">
+          <div className="flex items-center gap-2 text-slate-400">
+            <span className="material-symbols-outlined text-lg">playlist_add</span>
+            <span className="text-sm">Answer options — coming soon</span>
+          </div>
         </div>
       </div>
     </div>
   )
 }
+

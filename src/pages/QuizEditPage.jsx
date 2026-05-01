@@ -1,20 +1,72 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import TopBar from '../components/TopBar'
 import QuestionTypePicker from '../components/QuestionTypePicker'
 import QuestionCard from '../components/QuestionCard'
 
 export default function QuizEditPage({ onNavigate }) {
-  const [questions, setQuestions] = useState([])
-  const [title, setTitle] = useState('Untitled Quiz')
-  const [showPicker, setShowPicker] = useState(false)
+  const [questions,   setQuestions]   = useState([])
+  const [title,       setTitle]       = useState('Untitled Quiz')
+  const [showPicker,  setShowPicker]  = useState(false)
+  const [quizId,      setQuizId]      = useState(null)
+  const titleTimerRef = useRef(null)
 
-  function handleSelectType(type) {
-    setQuestions((prev) => [...prev, { id: Date.now(), type }])
-    setShowPicker(false)
+  // Create the quiz in DB on mount
+  useEffect(() => {
+    fetch('/api/quizzes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Untitled Quiz' }),
+    })
+      .then((r) => r.json())
+      .then((q) => setQuizId(q.id))
+      .catch(console.error)
+  }, [])
+
+  // Debounce-save title when it changes
+  useEffect(() => {
+    if (!quizId) return
+    if (titleTimerRef.current) clearTimeout(titleTimerRef.current)
+    titleTimerRef.current = setTimeout(() => {
+      fetch(`/api/quizzes/${quizId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      }).catch(console.error)
+    }, 1200)
+    return () => clearTimeout(titleTimerRef.current)
+  }, [title, quizId])
+
+  async function handleSelectType(type) {
+    if (!quizId) return
+    try {
+      const res = await fetch(`/api/quizzes/${quizId}/questions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      })
+      const q = await res.json()
+      setQuestions((prev) => [...prev, { id: q.id, type, content: {} }])
+      setShowPicker(false)
+    } catch (err) {
+      console.error('Failed to create question', err)
+    }
   }
 
-  function handleDeleteQuestion(id) {
+  async function handleDeleteQuestion(id) {
     setQuestions((prev) => prev.filter((q) => q.id !== id))
+    try {
+      await fetch(`/api/questions/${id}`, { method: 'DELETE' })
+    } catch (err) {
+      console.error('Failed to delete question', err)
+    }
+  }
+
+  async function handleSaveContent(questionId, content) {
+    await fetch(`/api/questions/${questionId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    })
   }
 
   const isEmpty = questions.length === 0
@@ -41,12 +93,13 @@ export default function QuizEditPage({ onNavigate }) {
                 question={q}
                 index={i}
                 onDelete={handleDeleteQuestion}
+                onSaveContent={handleSaveContent}
               />
             ))}
           </div>
         )}
 
-        {/* Type picker — shown after clicking Add Question */}
+        {/* Inline type picker */}
         {showPicker && (
           <QuestionTypePicker
             onSelect={handleSelectType}
@@ -55,12 +108,13 @@ export default function QuizEditPage({ onNavigate }) {
           />
         )}
 
-        {/* Add Question button — hidden while picker is open */}
+        {/* Add Question button */}
         {!showPicker && (
           <div className={`flex justify-center ${isEmpty ? 'pt-20' : 'pt-4'}`}>
             <button
               onClick={() => setShowPicker(true)}
-              className="flex items-center gap-2 px-6 py-3 bg-primary-container text-on-primary rounded-xl font-semibold shadow-md hover:shadow-lg active:scale-95 transition-all"
+              disabled={!quizId}
+              className="flex items-center gap-2 px-6 py-3 bg-primary-container text-on-primary rounded-xl font-semibold shadow-md hover:shadow-lg active:scale-95 transition-all disabled:opacity-50 disabled:cursor-wait"
             >
               <span className="material-symbols-outlined">add</span>
               Add Question

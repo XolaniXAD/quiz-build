@@ -46,6 +46,10 @@ app.use('/uploads', express.static(UPLOADS_DIR))
 // ── Helper ────────────────────────────────────────────────────────────────────
 const query = (text, params) => pool.query(text, params)
 
+// ── Schema migration: ensure questions.type column exists ────────────────────
+pool.query(`ALTER TABLE questions ADD COLUMN IF NOT EXISTS type VARCHAR(50) DEFAULT 'multiple_choice'`)
+  .catch(() => {})
+
 // ═════════════════════════════════════════════════════════════════════════════
 // QUIZZES
 // ═════════════════════════════════════════════════════════════════════════════
@@ -162,7 +166,7 @@ app.get('/api/quizzes/:quizId/questions', async (req, res) => {
 app.post('/api/quizzes/:quizId/questions', async (req, res) => {
   try {
     const { quizId } = req.params
-    const { content = {}, position } = req.body
+    const { content = {}, position, type = 'multiple_choice' } = req.body
 
     // Auto-assign next position if not provided
     let pos = position
@@ -175,8 +179,8 @@ app.post('/api/quizzes/:quizId/questions', async (req, res) => {
     }
 
     const { rows } = await query(
-      'INSERT INTO questions (quiz_id, position, content) VALUES ($1, $2, $3) RETURNING *',
-      [quizId, pos, JSON.stringify(content)]
+      'INSERT INTO questions (quiz_id, position, content, type) VALUES ($1, $2, $3, $4) RETURNING *',
+      [quizId, pos, JSON.stringify(content), type]
     )
 
     // Also update quiz updated_at
@@ -200,6 +204,7 @@ app.put('/api/questions/:id', async (req, res) => {
 
     if (content !== undefined) { fields.push(`content = $${i++}`); values.push(JSON.stringify(content)) }
     if (position !== undefined) { fields.push(`position = $${i++}`); values.push(position) }
+    if (req.body.type !== undefined) { fields.push(`type = $${i++}`); values.push(req.body.type) }
     fields.push(`updated_at = NOW()`)
     values.push(id)
 
