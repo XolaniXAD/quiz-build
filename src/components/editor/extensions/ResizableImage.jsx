@@ -4,6 +4,14 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useEditorContext } from '../EditorContext'
 
+// Inject caret blink keyframe once at module load
+if (typeof document !== 'undefined' && !document.getElementById('img-caret-kf')) {
+  const s = document.createElement('style')
+  s.id = 'img-caret-kf'
+  s.textContent = '@keyframes imgCaretBlink{0%,100%{opacity:1}50%{opacity:0}}'
+  document.head.appendChild(s)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  ResizeOverlay — portal into document.body, OUTSIDE ProseMirror's DOM.
 //  PM registers native listeners on .ProseMirror. Events here never reach PM.
@@ -173,11 +181,17 @@ function ResizableImageView({ node, updateAttributes, deleteNode, selected, edit
   const { onCropRequest } = useEditorContext()
   const [hover,       setHover]       = useState(false)
   const [contextMenu, setContextMenu] = useState(null)
+  const [cursorSide,  setCursorSide]  = useState(null) // 'left' | 'right' | null
   const imgRef          = useRef(null)
   const mountedRef      = useRef(true)
-  // Always-fresh ref — avoids stale updateAttributes captured in drag closures
   const updateAttrsRef  = useRef(updateAttributes)
   updateAttrsRef.current = updateAttributes
+
+  // Where is the ProseMirror text cursor relative to this node?
+  const nodePos     = typeof getPos === 'function' ? getPos() : null
+  const sel         = editor.state.selection
+  const caretBefore = !selected && nodePos !== null && sel.empty && sel.from === nodePos
+  const caretAfter  = !selected && nodePos !== null && sel.empty && sel.from === nodePos + 1
 
   useEffect(() => () => { mountedRef.current = false }, [])
 
@@ -265,6 +279,10 @@ function ResizableImageView({ node, updateAttributes, deleteNode, selected, edit
         marginTop:    wrapMode==='center' ? '0.5em' : undefined,
         width:  width   || undefined,
         height: (height && height !== 'auto') ? height : undefined,
+        // Subtle hover ring — shows the image is interactive
+        outline: selected ? 'none' : hover ? '2px solid rgba(36,99,235,0.35)' : 'none',
+        outlineOffset: 2,
+        transition: 'outline 0.12s',
       }
 
   const imgStyle = isAbsolute
@@ -292,6 +310,50 @@ function ResizableImageView({ node, updateAttributes, deleteNode, selected, edit
         {/* Portal resize overlay — document.body, invisible to ProseMirror */}
         {showOverlay && imgRef.current && (
           <ResizeOverlay imgEl={imgRef.current} onResize={handleResize} />
+        )}
+
+        {/* ── Word-like cursor UX (inline modes only) ───────────────────── */}
+        {!isAbsolute && !selected && <>
+          {/* Left click zone: hover preview + click to place cursor BEFORE image */}
+          <span
+            style={{ position:'absolute', left:0, top:0, width:24, height:'100%',
+                     cursor:'text', zIndex:15 }}
+            onMouseEnter={() => setCursorSide('left')}
+            onMouseLeave={() => setCursorSide(null)}
+            onMouseDown={(e) => {
+              e.preventDefault()
+              if (nodePos !== null) editor.chain().focus().setTextSelection(nodePos).run()
+            }}
+          />
+          {/* Right click zone: hover preview + click to place cursor AFTER image */}
+          <span
+            style={{ position:'absolute', right:0, top:0, width:24, height:'100%',
+                     cursor:'text', zIndex:15 }}
+            onMouseEnter={() => setCursorSide('right')}
+            onMouseLeave={() => setCursorSide(null)}
+            onMouseDown={(e) => {
+              e.preventDefault()
+              if (nodePos !== null) editor.chain().focus().setTextSelection(nodePos + 1).run()
+            }}
+          />
+        </>}
+
+        {/* Full-height caret: shown when ProseMirror cursor is adjacent OR user hovers an edge */}
+        {!isAbsolute && (caretBefore || cursorSide === 'left') && (
+          <span style={{
+            position:'absolute', left:-1.5, top:0, bottom:0, width:2, borderRadius:1,
+            background:'#1a56db', pointerEvents:'none', zIndex:20,
+            animation: caretBefore ? 'imgCaretBlink 1s step-start infinite' : 'none',
+            opacity: cursorSide === 'left' && !caretBefore ? 0.5 : 1,
+          }} />
+        )}
+        {!isAbsolute && (caretAfter || cursorSide === 'right') && (
+          <span style={{
+            position:'absolute', right:-1.5, top:0, bottom:0, width:2, borderRadius:1,
+            background:'#1a56db', pointerEvents:'none', zIndex:20,
+            animation: caretAfter ? 'imgCaretBlink 1s step-start infinite' : 'none',
+            opacity: cursorSide === 'right' && !caretAfter ? 0.5 : 1,
+          }} />
         )}
 
         {/* Wrap mode toolbar */}
