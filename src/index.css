@@ -29,7 +29,7 @@ body {
 .quiz-editor-content {
   outline: none;
   min-height: 120px;
-  padding: 14px 16px;
+  padding: 14px 16px 64px; /* generous bottom breathing room */
   position: relative; /* needed for absolutely-positioned images */
   overflow: visible;
   cursor: text;
