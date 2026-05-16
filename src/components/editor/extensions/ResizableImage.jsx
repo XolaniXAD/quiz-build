@@ -37,24 +37,25 @@ function ResizeOverlay({ imgEl, onResize }) {
   useEffect(() => {
     if (!imgEl) return
 
-    // Walk up to find the scrollable editor container — its top edge is
-    // exactly where the navbar ends and content begins.
-    function getScrollParent(el) {
+    // Walk up to the .ProseMirror element — its bounding rect gives us the
+    // exact clip boundary (below the fixed navbar + editor toolbar).
+    function getProseMirrorEl(el) {
       let node = el.parentElement
-      while (node && node !== document.documentElement) {
-        const { overflow, overflowY } = window.getComputedStyle(node)
-        if (/auto|scroll/.test(overflow + overflowY)) return node
+      while (node) {
+        if (node.classList && node.classList.contains('ProseMirror')) return node
         node = node.parentElement
       }
-      return document.documentElement
+      return null
     }
-    const scrollParent = getScrollParent(imgEl)
+    const editorEl = getProseMirrorEl(imgEl)
 
     function tick() {
       const r  = imgEl.getBoundingClientRect()
-      const sr = scrollParent.getBoundingClientRect()
-      const visTop    = Math.max(0, sr.top)
-      const visBottom = Math.min(window.innerHeight, sr.bottom)
+      const er = editorEl ? editorEl.getBoundingClientRect() : { top: 0, bottom: window.innerHeight }
+      // visTop: the higher of the editor's own top edge OR 0 (in case editor
+      // itself scrolls above the viewport top)
+      const visTop    = Math.max(0, er.top)
+      const visBottom = Math.min(window.innerHeight, er.bottom)
 
       // Completely outside visible editor area — hide
       if (r.bottom < visTop || r.top > visBottom ||
