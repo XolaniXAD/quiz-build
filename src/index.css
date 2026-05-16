@@ -35,11 +35,11 @@ body {
   cursor: text;
   color: #1e293b;
   font-size: 15px;
-  line-height: 1.7;
+  line-height: 1.5;
   font-family: 'Inter', sans-serif;
 }
 
-.quiz-editor-content p { margin: 0 0 0.45em; }
+.quiz-editor-content p { margin: 0; }
 .quiz-editor-content p:last-child { margin-bottom: 0; }
 
 .quiz-editor-content strong { font-weight: 700; }

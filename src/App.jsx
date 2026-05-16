@@ -3,7 +3,7 @@ import DashboardPage from './pages/DashboardPage'
 import QuizEditPage from './pages/QuizEditPage'
 
 export default function App() {
-  const [page, setPage] = useState('dashboard') // 'dashboard' | 'editor'
+  const [page, setPage] = useState('editor') // 'dashboard' | 'editor'
 
   function navigate(target) {
     if (target === 'quizzes' || target === 'dashboard') setPage('dashboard')
