@@ -57,12 +57,24 @@ function ResizeOverlay({ imgEl, onResize }) {
     }
     const editorEl = getProseMirrorEl(imgEl)
 
+    // Find the bottom edge of any fixed/sticky header covering the top of the
+    // viewport — computed once on mount (navbar height never changes at runtime).
+    let navbarBottom = 0
+    document.querySelectorAll('header').forEach(h => {
+      const hs = window.getComputedStyle(h)
+      if (hs.position === 'fixed' || hs.position === 'sticky') {
+        const hr = h.getBoundingClientRect()
+        if (hr.top < 10) navbarBottom = Math.max(navbarBottom, hr.bottom)
+      }
+    })
+
     function tick() {
       const r  = imgEl.getBoundingClientRect()
       const er = editorEl ? editorEl.getBoundingClientRect() : { top: 0, bottom: window.innerHeight }
-      // visTop: the higher of the editor's own top edge OR 0 (in case editor
-      // itself scrolls above the viewport top)
-      const visTop    = Math.max(0, er.top)
+      // visTop = the highest of: navbar bottom, editor top, or 0.
+      // When the editor scrolls above the viewport, er.top goes negative —
+      // without navbarBottom here the overlay would bleed over the fixed navbar.
+      const visTop    = Math.max(navbarBottom, er.top, 0)
       const visBottom = Math.min(window.innerHeight, er.bottom)
 
       // Completely outside visible editor area — hide
