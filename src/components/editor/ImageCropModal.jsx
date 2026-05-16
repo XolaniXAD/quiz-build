@@ -37,19 +37,17 @@ export default function ImageCropModal({ imageSrc, questionId, onComplete, onCan
   useEffect(() => { cropRef.current    = crop    }, [crop])
   useEffect(() => { imgRectRef.current = imgRect }, [imgRect])
 
-  // Measure image position once it loads
+  // Measure image size once it loads.
+  // We position the image at a fixed top:40, left:40 so the coordinates are
+  // always {x:40, y:40, w, h} — stable regardless of the container resizing.
+  const PADDING = 40
   const onImgLoad = useCallback(() => {
-    if (!imgRef.current || !containerRef.current) return
-    const cRect = containerRef.current.getBoundingClientRect()
-    const iRect = imgRef.current.getBoundingClientRect()
-    const rect = {
-      x: iRect.left - cRect.left,
-      y: iRect.top  - cRect.top,
-      w: iRect.width,
-      h: iRect.height,
-    }
+    if (!imgRef.current) return
+    const w = imgRef.current.offsetWidth
+    const h = imgRef.current.offsetHeight
+    const rect = { x: PADDING, y: PADDING, w, h }
     setImgRect(rect)
-    setCrop({ x: rect.x, y: rect.y, w: rect.w, h: rect.h })
+    setCrop(rect)
   }, [])
 
   // ── Handle drag ──────────────────────────────────────────────────────────
@@ -164,13 +162,13 @@ export default function ImageCropModal({ imageSrc, questionId, onComplete, onCan
     }
   }
 
-  const containerW = imgRect ? imgRect.w + 80 : 'min(90vw, 900px)'
-  const containerH = imgRect ? imgRect.h + 80 : '75vh'
+  const containerW = imgRect ? imgRect.w + PADDING * 2 : 'min(90vw, 920px)'
+  const containerH = imgRect ? imgRect.h + PADDING * 2 : '80vh'
 
   return (
     <div
       style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
+        position: 'fixed', inset: 0, zIndex: 200000,
         background: '#111',
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
@@ -196,11 +194,10 @@ export default function ImageCropModal({ imageSrc, questionId, onComplete, onCan
           draggable={false}
           style={{
             position:   'absolute',
-            top:        '50%',
-            left:       '50%',
-            transform:  'translate(-50%, -50%)',
-            maxWidth:   'min(90vw, 840px)',
-            maxHeight:  '72vh',
+            top:        PADDING,
+            left:       PADDING,
+            maxWidth:   'min(calc(90vw - 80px), 840px)',
+            maxHeight:  'calc(72vh - 80px)',
             display:    'block',
             userSelect: 'none',
           }}
