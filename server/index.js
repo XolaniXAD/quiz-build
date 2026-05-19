@@ -67,9 +67,24 @@ app.use('/uploads', express.static(UPLOADS_DIR))
 // ── Helper ────────────────────────────────────────────────────────────────────
 const query = (text, params) => pool.query(text, params)
 
-// ── Schema migration: ensure questions.type column exists ────────────────────
-pool.query(`ALTER TABLE questions ADD COLUMN IF NOT EXISTS type VARCHAR(50) DEFAULT 'multiple_choice'`)
-  .catch(() => {})
+// ── Schema migrations: run on every server start, safe to re-run ────────────
+// ADD NEW COLUMNS HERE — never remove entries; old servers may not have run them yet.
+const MIGRATIONS = [
+  // questions.type — added early; kept first so ordering is preserved
+  `ALTER TABLE questions      ADD COLUMN IF NOT EXISTS type               VARCHAR(50)  NOT NULL DEFAULT 'multiple_choice'`,
+  // quizzes future columns
+  `ALTER TABLE quizzes        ADD COLUMN IF NOT EXISTS description        TEXT`,
+  `ALTER TABLE quizzes        ADD COLUMN IF NOT EXISTS published          BOOLEAN      NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE quizzes        ADD COLUMN IF NOT EXISTS time_limit_seconds INTEGER`,
+  // questions future columns
+  `ALTER TABLE questions      ADD COLUMN IF NOT EXISTS points             INTEGER      NOT NULL DEFAULT 1`,
+  `ALTER TABLE questions      ADD COLUMN IF NOT EXISTS explanation        TEXT`,
+  // options future columns
+  `ALTER TABLE options        ADD COLUMN IF NOT EXISTS media_url          TEXT`,
+  `ALTER TABLE options        ADD COLUMN IF NOT EXISTS match_key          TEXT`,
+]
+
+Promise.all(MIGRATIONS.map((sql) => pool.query(sql))).catch(console.error)
 
 // ═════════════════════════════════════════════════════════════════════════════
 // QUIZZES
@@ -413,6 +428,14 @@ app.delete('/api/images/:id', async (req, res) => {
 })
 
 // ── Start ─────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`API server running on http://localhost:${PORT}`)
+})
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌  Port ${PORT} is already in use.\n    Kill the existing process first, then restart.\n`)
+  } else {
+    console.error('Server error:', err)
+  }
+  process.exit(1)
 })

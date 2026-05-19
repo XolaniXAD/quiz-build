@@ -50,7 +50,10 @@ export default function RichTextEditor({ questionId, initialContent, onSave }) {
   const [saveStatus, setSaveStatus] = useState('saved') // 'saving' | 'saved' | 'error'
   const saveTimerRef = useRef(null)
   const mountedRef   = useRef(true)
-  useEffect(() => () => { mountedRef.current = false }, [])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   // ── Auto-save ─────────────────────────────────────────────────────────────
   // Resets the timer on every content change. Fires onSave() once the editor
