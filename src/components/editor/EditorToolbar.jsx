@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 function ToolBtn({ onClick, active, title, icon, disabled }) {
@@ -28,10 +29,14 @@ function Divider() {
 
 // ── Bullet list dropdown ──────────────────────────────────────────────────────
 const BULLET_TYPES = [
-  { id: 'disc',   label: 'Disc',   preview: '●' },
-  { id: 'circle', label: 'Circle', preview: '○' },
-  { id: 'square', label: 'Square', preview: '■' },
-  { id: 'arrow',  label: 'Arrow',  preview: '→' },
+  { id: 'disc',      label: 'Bullet',    preview: '●' },
+  { id: 'circle',    label: 'Circle',    preview: '○' },
+  { id: 'square',    label: 'Square',    preview: '■' },
+  { id: 'arrow',     label: 'Arrow',     preview: '→' },
+  { id: 'star',      label: 'Star',      preview: '★' },
+  { id: 'triangle',  label: 'Triangle',  preview: '▶' },
+  { id: 'check',     label: 'Check',     preview: '✓' },
+  { id: 'dash',      label: 'Dash',      preview: '–' },
 ]
 
 function BulletDropdown({ editor }) {
@@ -127,6 +132,202 @@ function OrderedDropdown({ editor }) {
               <DropItem key={t.id} preview={t.preview} label={t.label} onSelect={() => apply(t.id)} />
             ))}
           </DropPanel>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Font size dropdown ────────────────────────────────────────────────────────
+const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72]
+
+function FontSizeDropdown({ editor }) {
+  const [open, setOpen] = useState(false)
+  const [custom, setCustom] = useState('')
+  const [panelPos, setPanelPos] = useState({ top: 0, left: 0 })
+  const btnRef = useRef(null)
+
+  const current = editor.getAttributes('textStyle').fontSize
+  const currentNum = current ? parseInt(current) : null
+  const displayVal = currentNum || 15
+
+  function toggleOpen(e) {
+    e.preventDefault()
+    if (!open) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setPanelPos({ top: rect.bottom + 4, left: rect.left })
+    }
+    setOpen((v) => !v)
+  }
+
+  function apply(size) {
+    const { from, to } = editor.state.selection
+    const markType = editor.state.schema.marks.textStyle
+    if (markType && from !== to) {
+      editor.view.dispatch(editor.state.tr.addMark(from, to, markType.create({ fontSize: `${size}px` })))
+    }
+    setOpen(false)
+    setCustom('')
+  }
+
+  function submitCustom() {
+    const n = parseInt(custom)
+    if (n > 0 && n <= 400) apply(n)
+    setOpen(false)
+    setCustom('')
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        ref={btnRef}
+        onMouseDown={toggleOpen}
+        title="Font size"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 3,
+          height: 32, padding: '0 5px', borderRadius: 7,
+          border: '1px solid #e2e8f0', cursor: 'pointer', flexShrink: 0,
+          background: open ? '#f1f5f9' : 'white',
+          color: '#475569', fontFamily: 'Inter, sans-serif',
+        }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 17 }}>format_size</span>
+        <span style={{ fontSize: 12, minWidth: 18, textAlign: 'center', fontWeight: 500 }}>
+          {displayVal}
+        </span>
+        <span className="material-symbols-outlined" style={{ fontSize: 14 }}>arrow_drop_down</span>
+      </button>
+      {open && createPortal(
+        <>
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
+            onMouseDown={() => { setOpen(false); setCustom('') }}
+          />
+          <div style={{
+            position: 'fixed',
+            top: panelPos.top,
+            left: panelPos.left,
+            zIndex: 9999,
+            background: 'white', borderRadius: 10,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.13)',
+            border: '1px solid #e2e8f0', width: 90,
+            padding: '6px 0',
+          }}>
+            <div style={{ padding: '4px 8px 6px', borderBottom: '1px solid #f1f5f9' }}>
+              <input
+                autoFocus
+                type="number" min={1} max={400} placeholder="pt"
+                value={custom}
+                onChange={(e) => setCustom(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') submitCustom() }}
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '4px 6px', borderRadius: 6,
+                  border: '1.5px solid #cbd5e1', fontSize: 12,
+                  outline: 'none', fontFamily: 'Inter, sans-serif', color: '#1e293b',
+                }}
+                onFocus={(e) => { e.target.style.borderColor = '#2463eb' }}
+                onBlur={(e) => { e.target.style.borderColor = '#cbd5e1' }}
+              />
+            </div>
+            <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+              {FONT_SIZES.map((s) => (
+                <button
+                  key={s}
+                  onMouseDown={(e) => { e.preventDefault(); apply(s) }}
+                  style={{
+                    display: 'block', width: '100%', padding: '5px 14px',
+                    background: currentNum === s ? '#e0e7ff' : 'none',
+                    color: currentNum === s ? '#2463eb' : '#1e293b',
+                    border: 'none', cursor: 'pointer', fontSize: 13,
+                    fontFamily: 'Inter, sans-serif', textAlign: 'left',
+                  }}
+                  onMouseEnter={(e) => { if (currentNum !== s) e.currentTarget.style.background = '#f8fafc' }}
+                  onMouseLeave={(e) => { if (currentNum !== s) e.currentTarget.style.background = 'none' }}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+    </div>
+  )
+}
+
+// ── Font color picker ─────────────────────────────────────────────────────────
+const COLOR_SWATCHES = [
+  '#000000','#374151','#6b7280','#9ca3af','#d1d5db','#ffffff',
+  '#dc2626','#ea580c','#d97706','#65a30d','#16a34a','#0891b2',
+  '#2463eb','#7c3aed','#db2777','#be123c','#b45309','#166534',
+]
+
+function FontColorPicker({ editor }) {
+  const [open, setOpen] = useState(false)
+  const nativeRef = useRef(null)
+
+  const current = editor.getAttributes('textStyle').color || '#000000'
+
+  function apply(color) {
+    editor.chain().focus().setColor(color).run()
+    setOpen(false)
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onMouseDown={(e) => { e.preventDefault(); setOpen((v) => !v) }}
+        title="Font color"
+        style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          width: 32, height: 32, borderRadius: 7, border: 'none',
+          cursor: 'pointer', flexShrink: 0,
+          background: open ? '#f1f5f9' : 'transparent',
+          gap: 1, padding: '4px 6px',
+        }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 17, color: '#475569', lineHeight: 1 }}>format_color_text</span>
+        <span style={{ width: 16, height: 3, borderRadius: 2, background: current }} />
+      </button>
+      {open && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onMouseDown={() => setOpen(false)} />
+          <div style={{
+            position: 'absolute', top: 36, left: 0, zIndex: 50,
+            background: 'white', borderRadius: 10,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.13)',
+            border: '1px solid #e2e8f0', padding: '10px',
+            width: 156,
+          }}>
+            {/* Swatch grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4, marginBottom: 8 }}>
+              {COLOR_SWATCHES.map((c) => (
+                <button
+                  key={c}
+                  onMouseDown={(e) => { e.preventDefault(); apply(c) }}
+                  title={c}
+                  style={{
+                    width: 20, height: 20, borderRadius: 4,
+                    background: c, border: current === c ? '2px solid #2463eb' : '1px solid #e2e8f0',
+                    cursor: 'pointer', padding: 0,
+                  }}
+                />
+              ))}
+            </div>
+            {/* Custom color */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                ref={nativeRef}
+                type="color"
+                value={current}
+                style={{ width: 28, height: 28, padding: 0, border: 'none', borderRadius: 4, cursor: 'pointer', background: 'none' }}
+                onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
+              />
+              <span style={{ fontSize: 11, color: '#94a3b8' }}>Custom…</span>
+            </div>
+          </div>
         </>
       )}
     </div>
@@ -313,6 +514,16 @@ export default function EditorToolbar({ editor, onImageFile, onImageUrl, saveSta
         scrollbarWidth: 'none',
       }}
     >
+      {/* Font size */}
+      <FontSizeDropdown editor={editor} />
+
+      <Divider />
+
+      {/* Font color */}
+      <FontColorPicker editor={editor} />
+
+      <Divider />
+
       {/* Bold */}
       <ToolBtn
         icon="format_bold"

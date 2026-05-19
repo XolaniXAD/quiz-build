@@ -3,6 +3,8 @@ import StarterKit from '@tiptap/starter-kit'
 import TextAlign from '@tiptap/extension-text-align'
 import Highlight from '@tiptap/extension-highlight'
 import Placeholder from '@tiptap/extension-placeholder'
+import { TextStyle, FontSize } from '@tiptap/extension-text-style'
+import { Color } from '@tiptap/extension-color'
 import { useEffect, useState, useRef } from 'react'
 import { ResizableImage } from './extensions/ResizableImage'
 import { CustomBulletList, CustomOrderedList } from './extensions/CustomLists'
@@ -45,6 +47,9 @@ export default function RichTextEditor({ questionId, initialContent, onSave }) {
       }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Highlight,
+      TextStyle,
+      Color,
+      FontSize,
       Placeholder.configure({ placeholder: 'Type your question here, or paste / insert an image…' }),
       ResizableImage,
       CustomBulletList,

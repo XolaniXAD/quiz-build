@@ -64,17 +64,30 @@ body {
 .quiz-editor-content li { margin: 0.2em 0; }
 
 /* Bullet list types */
-.quiz-editor-content ul[data-list-type="disc"]   { list-style-type: disc; }
-.quiz-editor-content ul[data-list-type="circle"] { list-style-type: circle; }
-.quiz-editor-content ul[data-list-type="square"] { list-style-type: square; }
-.quiz-editor-content ul[data-list-type="arrow"]  { list-style-type: none; padding-left: 2em; }
-.quiz-editor-content ul[data-list-type="arrow"] > li { position: relative; }
-.quiz-editor-content ul[data-list-type="arrow"] > li::before {
-  content: "→";
-  position: absolute;
-  left: -1.4em;
-  color: #64748b;
+.quiz-editor-content ul[data-list-type="disc"]     { list-style-type: disc; }
+.quiz-editor-content ul[data-list-type="circle"]   { list-style-type: circle; }
+.quiz-editor-content ul[data-list-type="square"]   { list-style-type: square; }
+
+/* Custom marker bullet types */
+.quiz-editor-content ul[data-list-type="arrow"],
+.quiz-editor-content ul[data-list-type="star"],
+.quiz-editor-content ul[data-list-type="triangle"],
+.quiz-editor-content ul[data-list-type="check"],
+.quiz-editor-content ul[data-list-type="dash"] {
+  list-style-type: none;
+  padding-left: 2em;
 }
+.quiz-editor-content ul[data-list-type="arrow"]    > li,
+.quiz-editor-content ul[data-list-type="star"]     > li,
+.quiz-editor-content ul[data-list-type="triangle"] > li,
+.quiz-editor-content ul[data-list-type="check"]    > li,
+.quiz-editor-content ul[data-list-type="dash"]     > li { position: relative; }
+
+.quiz-editor-content ul[data-list-type="arrow"]    > li::before { content: "→"; position: absolute; left: -1.6em; }
+.quiz-editor-content ul[data-list-type="star"]     > li::before { content: "★"; position: absolute; left: -1.6em; color: #f59e0b; }
+.quiz-editor-content ul[data-list-type="triangle"] > li::before { content: "▶"; position: absolute; left: -1.6em; font-size: 0.7em; top: 0.2em; }
+.quiz-editor-content ul[data-list-type="check"]    > li::before { content: "✓"; position: absolute; left: -1.6em; color: #16a34a; font-weight: 700; }
+.quiz-editor-content ul[data-list-type="dash"]     > li::before { content: "–"; position: absolute; left: -1.6em; }
 
 /* Ordered list types */
 .quiz-editor-content ol[data-list-type="decimal"]     { list-style-type: decimal; }
