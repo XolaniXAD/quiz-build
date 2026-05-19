@@ -1,3 +1,22 @@
+/**
+ * src/components/QuestionCard.jsx — single question card in the editor
+ * ───────────────────────────────────────────────────────────────────
+ * Props:
+ *   question:       { id: number, type: string, content: object }
+ *   index:          number — 0-based, displayed as (index + 1) in the UI
+ *   onDelete:       (id: number) => void
+ *   onSaveContent:  (questionId: number, content: object) => Promise<void>
+ *
+ * TYPE_META maps question.type → display label, icon, and accent colour.
+ * To add a new question type:
+ *   1. Add an entry to TYPE_META below
+ *   2. Add the type string to QUESTION_TYPES in src/constants.js
+ *   3. Add the type as an option in QuestionTypePicker.jsx
+ *
+ * ⚠️  Answer options section is a placeholder — the API endpoints exist
+ *     (see src/api/index.js: getOptions, createOption, etc.) but the UI
+ *     is not yet built.
+ */
 import RichTextEditor from './editor/RichTextEditor'
 
 const TYPE_META = {

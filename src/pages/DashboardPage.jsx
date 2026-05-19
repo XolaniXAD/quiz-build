@@ -1,4 +1,21 @@
-import { useState } from 'react'
+/**
+ * src/pages/DashboardPage.jsx — quiz library management page
+ * ────────────────────────────────────────────────────────────
+ * Props: { onEditQuiz(quizId|null), onNavigate(target: string) }
+ *
+ * ⚠️  MOCK DATA: Currently uses a hardcoded MOCK_QUIZZES array.
+ *     To wire to the real API:
+ *       1. Add a useEffect that calls getQuizzes() from src/api/index.js
+ *       2. Replace useState(MOCK_QUIZZES) initial value with useState([])
+ *       3. Wire delete → deleteQuiz(), duplicate → createQuiz() + duplicate questions
+ *
+ * Layout: <TopBar> + <SideNav> fixed — main shifts right by md:ml-64
+ *   Stats row → search/filter bar → card or list grid → <Footer>
+ *
+ * Filter logic: client-side, memoised with useMemo (recalculates only when
+ *   quizzes, search, or filter change).
+ */
+import { useState, useMemo } from 'react'
 import TopBar from '../components/TopBar'
 import SideNav from '../components/SideNav'
 import Footer from '../components/Footer'
@@ -31,14 +48,14 @@ export default function DashboardPage({ onEditQuiz, onNavigate }) {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
-  const filtered = quizzes.filter((q) => {
+  const filtered = useMemo(() => quizzes.filter((q) => {
     const matchSearch = q.title.toLowerCase().includes(search.toLowerCase())
     const matchFilter =
       filter === 'all' ||
       (filter === 'published' && q.published) ||
       (filter === 'draft' && !q.published)
     return matchSearch && matchFilter
-  })
+  }), [quizzes, search, filter])
 
   function handleDelete(quiz) { setDeleteTarget(quiz) }
   function confirmDelete(quiz) {

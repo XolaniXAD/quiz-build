@@ -1,50 +1,58 @@
+/**
+ * src/pages/QuizEditPage.jsx — quiz creation / editing page
+ * ─────────────────────────────────────────────────────────
+ * Props: { onNavigate(target: string) }
+ *
+ * Lifecycle:
+ *   mount  → createQuiz()     → stores quizId in state
+ *   title  → updateQuiz()     (debounced TITLE_SAVE_DELAY_MS ms)
+ *   + btn  → createQuestion() → appends to questions state
+ *   delete → deleteQuestion() → optimistic remove from state
+ *   save   → updateQuestion() (called by RichTextEditor auto-save)
+ *
+ * Child components:
+ *   <TopBar>             — fixed navigation bar at top
+ *   <QuestionTypePicker> — overlay to pick question type when adding
+ *   <QuestionCard>       — one per question, contains its <RichTextEditor>
+ *
+ * NOTE: quizId starts null — "Add Question" button is disabled until
+ *       createQuiz() resolves and quizId is set.
+ */
 import { useState, useEffect, useRef } from 'react'
 import TopBar from '../components/TopBar'
 import QuestionTypePicker from '../components/QuestionTypePicker'
 import QuestionCard from '../components/QuestionCard'
+import { createQuiz, updateQuiz, createQuestion, deleteQuestion, updateQuestion } from '../api/index'
+import { TITLE_SAVE_DELAY_MS } from '../constants'
 
 export default function QuizEditPage({ onNavigate }) {
-  const [questions,   setQuestions]   = useState([])
-  const [title,       setTitle]       = useState('Untitled Quiz')
-  const [showPicker,  setShowPicker]  = useState(false)
-  const [quizId,      setQuizId]      = useState(null)
+  const [questions,  setQuestions]  = useState([])
+  const [title,      setTitle]      = useState('Untitled Quiz')
+  const [showPicker, setShowPicker] = useState(false)
+  const [quizId,     setQuizId]     = useState(null)
   const titleTimerRef = useRef(null)
 
-  // Create the quiz in DB on mount
+  // Create the quiz row in DB immediately on mount
   useEffect(() => {
-    fetch('/api/quizzes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'Untitled Quiz' }),
-    })
-      .then((r) => r.json())
+    createQuiz('Untitled Quiz')
       .then((q) => setQuizId(q.id))
       .catch(console.error)
   }, [])
 
-  // Debounce-save title when it changes
+  // Debounce-save title whenever it changes (skips if quizId not yet set)
   useEffect(() => {
     if (!quizId) return
     if (titleTimerRef.current) clearTimeout(titleTimerRef.current)
     titleTimerRef.current = setTimeout(() => {
-      fetch(`/api/quizzes/${quizId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title }),
-      }).catch(console.error)
-    }, 1200)
+      updateQuiz(quizId, { title }).catch(console.error)
+    }, TITLE_SAVE_DELAY_MS)
     return () => clearTimeout(titleTimerRef.current)
   }, [title, quizId])
 
   async function handleSelectType(type) {
     if (!quizId) return
     try {
-      const res = await fetch(`/api/quizzes/${quizId}/questions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type }),
-      })
-      const q = await res.json()
+      const q = await createQuestion(quizId, { type })
       setQuestions((prev) => [...prev, { id: q.id, type, content: {} }])
       setShowPicker(false)
     } catch (err) {
@@ -53,20 +61,17 @@ export default function QuizEditPage({ onNavigate }) {
   }
 
   async function handleDeleteQuestion(id) {
-    setQuestions((prev) => prev.filter((q) => q.id !== id))
+    setQuestions((prev) => prev.filter((q) => q.id !== id)) // optimistic
     try {
-      await fetch(`/api/questions/${id}`, { method: 'DELETE' })
+      await deleteQuestion(id)
     } catch (err) {
       console.error('Failed to delete question', err)
     }
   }
 
+  // Called by RichTextEditor auto-save (via QuestionCard prop chain)
   async function handleSaveContent(questionId, content) {
-    await fetch(`/api/questions/${questionId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content }),
-    })
+    await updateQuestion(questionId, { content })
   }
 
   const isEmpty = questions.length === 0

@@ -1,3 +1,34 @@
+/**
+ * src/components/editor/RichTextEditor.jsx — TipTap rich text editor
+ * ───────────────────────────────────────────────────────────────────
+ * Props:
+ *   questionId:       number|null  — ID used for image upload endpoint
+ *   initialContent:   object|''   — TipTap JSON doc to pre-load
+ *   onSave(content):  function    — called with TipTap JSON after AUTOSAVE_DELAY_MS
+ *
+ * Auto-save:  every content change debounces AUTOSAVE_DELAY_MS → calls onSave(json)
+ * Images:     paste or toolbar → uploadImages() → POST /api/questions/:id/images
+ * Crop:       right-click image → opens <ImageCropModal> overlay
+ *
+ * TipTap extensions (order matters — StarterKit must be first):
+ *   StarterKit          — base (bulletList/orderedList disabled; Custom* replaces them)
+ *   TextAlign           — left/center/right on headings + paragraphs
+ *   Highlight           — yellow highlight mark
+ *   TextStyle           — base <span> mark; required by Color + FontSize
+ *   Color               — inline text color (extends TextStyle)
+ *   FontSize            — inline font-size (extends TextStyle, built into @tiptap/extension-text-style)
+ *   Placeholder         — ghost text when editor is empty
+ *   ResizableImage      — custom node: drag-resizable images with wrap modes
+ *   CustomBulletList    — extends BulletList with listType attribute
+ *   CustomOrderedList   — extends OrderedList with listType attribute
+ *
+ * Context provided: EditorContext { questionId, onCropRequest }
+ *   → consumed by ResizableImage NodeView to trigger crop modal
+ *
+ * ⚠️  TipTap v3: FontSize and Color MUST be imported from
+ *     @tiptap/extension-text-style. Do NOT use a custom FontSize extension —
+ *     it will conflict with the built-in and break setFontSize.
+ */
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import TextAlign from '@tiptap/extension-text-align'
@@ -11,46 +42,43 @@ import { CustomBulletList, CustomOrderedList } from './extensions/CustomLists'
 import EditorToolbar from './EditorToolbar'
 import ImageCropModal from './ImageCropModal'
 import { EditorContext } from './EditorContext'
+import { uploadImages } from '../../api/index'
+import { AUTOSAVE_DELAY_MS, EDITOR_PLACEHOLDER } from '../../constants'
 
 export default function RichTextEditor({ questionId, initialContent, onSave }) {
-  const [cropState,  setCropState]  = useState(null)   // { src, onComplete }
+  const [cropState,  setCropState]  = useState(null)    // { src, onComplete } | null
   const [saveStatus, setSaveStatus] = useState('saved') // 'saving' | 'saved' | 'error'
   const saveTimerRef = useRef(null)
   const mountedRef   = useRef(true)
   useEffect(() => () => { mountedRef.current = false }, [])
 
-  // ── Auto-save helper ──────────────────────────────────────────────────────
+  // ── Auto-save ─────────────────────────────────────────────────────────────
+  // Resets the timer on every content change. Fires onSave() once the editor
+  // has been idle for AUTOSAVE_DELAY_MS ms.
   function scheduleAutoSave(content) {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     setSaveStatus('saving')
     saveTimerRef.current = setTimeout(async () => {
       if (!mountedRef.current) return
-      if (onSave) {
-        try {
-          await onSave(content)
-          if (mountedRef.current) setSaveStatus('saved')
-        } catch {
-          if (mountedRef.current) setSaveStatus('error')
-        }
-      } else {
+      try {
+        if (onSave) await onSave(content)
         if (mountedRef.current) setSaveStatus('saved')
+      } catch {
+        if (mountedRef.current) setSaveStatus('error')
       }
-    }, 1500)
+    }, AUTOSAVE_DELAY_MS)
   }
 
-  // ── TipTap editor ─────────────────────────────────────────────────────────
+  // ── TipTap instance ───────────────────────────────────────────────────────
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({
-        bulletList: false,
-        orderedList: false,
-      }),
+      StarterKit.configure({ bulletList: false, orderedList: false }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Highlight,
-      TextStyle,
+      TextStyle,   // must come before Color + FontSize (they extend it)
       Color,
       FontSize,
-      Placeholder.configure({ placeholder: 'Type your question here, or paste / insert an image…' }),
+      Placeholder.configure({ placeholder: EDITOR_PLACEHOLDER }),
       ResizableImage,
       CustomBulletList,
       CustomOrderedList,
@@ -60,13 +88,14 @@ export default function RichTextEditor({ questionId, initialContent, onSave }) {
     editorProps: {
       attributes: { class: 'quiz-editor-content' },
       handlePaste: (_view, event) => {
+        // Intercept image pastes → upload to server instead of embedding base64
         const items = event.clipboardData?.items
         if (!items) return false
         for (const item of items) {
           if (item.type.startsWith('image/')) {
             event.preventDefault()
             const blob = item.getAsFile()
-            if (blob) uploadImageFile(blob)
+            if (blob) handleImageFile(blob)
             return true
           }
         }
@@ -75,25 +104,29 @@ export default function RichTextEditor({ questionId, initialContent, onSave }) {
     },
   })
 
-  // ── Image upload ──────────────────────────────────────────────────────────
-  async function uploadImageFile(file) {
+  // ── Image handling ────────────────────────────────────────────────────────
+  async function handleImageFile(file) {
     if (!questionId || !editor) return
     try {
-      const formData = new FormData()
-      formData.append('images', file)
-      const res   = await fetch(`/api/questions/${questionId}/images`, { method: 'POST', body: formData })
-      const [img] = await res.json()
-      editor.chain().focus().insertContent({ type: 'resizableImage', attrs: { src: `/uploads/${img.filename}` } }).run()
+      const [img] = await uploadImages(questionId, [file])
+      editor.chain().focus().insertContent({
+        type: 'resizableImage',
+        attrs: { src: `/uploads/${img.filename}` },
+      }).run()
     } catch (err) {
       console.error('Image upload failed', err)
     }
   }
 
-  function insertImageUrl(url) {
-    editor?.chain().focus().insertContent({ type: 'resizableImage', attrs: { src: url } }).run()
+  function handleImageUrl(url) {
+    editor?.chain().focus().insertContent({
+      type: 'resizableImage',
+      attrs: { src: url },
+    }).run()
   }
 
-  // ── Crop request from NodeView ────────────────────────────────────────────
+  // ── Crop modal ────────────────────────────────────────────────────────────
+  // ResizableImage NodeView calls onCropRequest via EditorContext
   function handleCropRequest({ src, onComplete }) {
     setCropState({ src, onComplete })
   }
@@ -109,8 +142,8 @@ export default function RichTextEditor({ questionId, initialContent, onSave }) {
       <div className="quiz-editor-wrap">
         <EditorToolbar
           editor={editor}
-          onImageFile={uploadImageFile}
-          onImageUrl={insertImageUrl}
+          onImageFile={handleImageFile}
+          onImageUrl={handleImageUrl}
           saveStatus={saveStatus}
         />
         <EditorContent editor={editor} />

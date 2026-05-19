@@ -1,5 +1,27 @@
+/**
+ * src/components/editor/EditorToolbar.jsx — rich text formatting toolbar
+ * ────────────────────────────────────────────────────────────
+ * Props:
+ *   editor:       TipTap Editor instance
+ *   onImageFile:  (file: File) => void    — toolbar file-input handler
+ *   onImageUrl:   (url: string) => void   — insert-by-URL handler
+ *   saveStatus:   'saving' | 'saved' | 'error'
+ *
+ * ⚠️  OVERFLOW / DROPDOWN RULE:
+ *   The toolbar container sets overflowX: auto. CSS spec forces overflow-y to
+ *   also be auto, which CLIPS absolutely-positioned children that extend below
+ *   the toolbar. ALL dropdown panels MUST render via createPortal(panel, document.body)
+ *   with position: fixed and coordinates from getBoundingClientRect().
+ *   See FontSizeDropdown, BulletDropdown, OrderedDropdown for the pattern.
+ *
+ * Dropdown data:
+ *   BULLET_TYPES / ORDERED_TYPES — list style options
+ *   EDITOR_FONT_SIZES            — font size list (from src/constants.js)
+ *   EDITOR_DEFAULT_FONT_SIZE     — fallback when no fontSize mark is active
+ */
 import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { EDITOR_FONT_SIZES, EDITOR_DEFAULT_FONT_SIZE } from '../../constants'
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 function ToolBtn({ onClick, active, title, icon, disabled }) {
@@ -139,7 +161,7 @@ function OrderedDropdown({ editor }) {
 }
 
 // ── Font size dropdown ────────────────────────────────────────────────────────
-const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72]
+// Font sizes are imported from src/constants.js (EDITOR_FONT_SIZES)
 
 function FontSizeDropdown({ editor }) {
   const [open, setOpen] = useState(false)
@@ -149,7 +171,7 @@ function FontSizeDropdown({ editor }) {
 
   const current = editor.getAttributes('textStyle').fontSize
   const currentNum = current ? parseInt(current) : null
-  const displayVal = currentNum || 15
+  const displayVal = currentNum || EDITOR_DEFAULT_FONT_SIZE
 
   function toggleOpen(e) {
     e.preventDefault()
@@ -231,7 +253,7 @@ function FontSizeDropdown({ editor }) {
               />
             </div>
             <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-              {FONT_SIZES.map((s) => (
+              {EDITOR_FONT_SIZES.map((s) => (
                 <button
                   key={s}
                   onMouseDown={(e) => { e.preventDefault(); apply(s) }}

@@ -1,3 +1,24 @@
+/**
+ * server/index.js — Express API server
+ * ────────────────────────────────────────────────────────────
+ * Listens on PORT (default 3001). Serves /uploads/ as static files.
+ * Database: see server/db.js for connection config.
+ * Schema:   see server/schema.sql
+ *
+ * Route groups (each separated by a ═══ banner comment in the file):
+ *   QUIZZES    GET/POST /api/quizzes
+ *              GET/PUT/DELETE /api/quizzes/:id
+ *   QUESTIONS  GET/POST /api/quizzes/:id/questions
+ *              PUT/DELETE /api/questions/:id
+ *              PUT /api/questions/:id/reorder
+ *   OPTIONS    GET/POST /api/questions/:id/options
+ *              PUT/DELETE /api/options/:id
+ *   IMAGES     POST /api/questions/:id/images  (multipart, field: "images")
+ *              DELETE /api/images/:id
+ *
+ * All requests that return a body respond with JSON.
+ * 204 No Content is returned for successful deletes.
+ */
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
