@@ -8,6 +8,11 @@
  *   'editor'    (default on load) → <QuizEditPage>
  *   'dashboard'                   → <DashboardPage>
  *
+ * Quiz persistence across reloads:
+ *   currentQuizId is read from / written to localStorage('quizId').
+ *   On reload the same quiz is reopened instead of creating a new blank one.
+ *   Set localStorage.removeItem('quizId') to force-create a fresh quiz.
+ *
  * To add a new page:
  *   1. Import the page component
  *   2. Add its case to navigate()
@@ -18,19 +23,42 @@ import DashboardPage from './pages/DashboardPage'
 import QuizEditPage from './pages/QuizEditPage'
 
 export default function App() {
-  const [page, setPage] = useState('editor') // 'dashboard' | 'editor'
+  const [page, setPage] = useState('editor')
 
-  function navigate(target) {
+  // Restore last-opened quiz from localStorage so reloads don't lose the quiz
+  const [currentQuizId, setCurrentQuizId] = useState(
+    () => localStorage.getItem('quizId') ? Number(localStorage.getItem('quizId')) : null
+  )
+
+  // Called by QuizEditPage when it creates a brand-new quiz
+  function handleQuizCreated(id) {
+    setCurrentQuizId(id)
+    localStorage.setItem('quizId', String(id))
+  }
+
+  function navigate(target, quizId = null) {
     if (target === 'quizzes' || target === 'dashboard') setPage('dashboard')
+    if (target === 'editor') {
+      setCurrentQuizId(quizId)
+      if (quizId) localStorage.setItem('quizId', String(quizId))
+      else localStorage.removeItem('quizId')
+      setPage('editor')
+    }
   }
 
   if (page === 'editor') {
-    return <QuizEditPage onNavigate={navigate} />
+    return (
+      <QuizEditPage
+        quizId={currentQuizId}
+        onQuizCreated={handleQuizCreated}
+        onNavigate={navigate}
+      />
+    )
   }
 
   return (
     <DashboardPage
-      onEditQuiz={() => setPage('editor')}
+      onEditQuiz={(id) => navigate('editor', id)}
       onNavigate={navigate}
     />
   )

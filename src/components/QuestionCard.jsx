@@ -61,7 +61,7 @@ export default function QuestionCard({ question, index, onDelete, onSaveContent 
         <div className="px-5 md:px-6 py-4">
           <RichTextEditor
             questionId={question.id}
-            initialContent={question.content || ''}
+            initialContent={question.content ?? null}
             onSave={onSaveContent ? (content) => onSaveContent(question.id, content) : undefined}
           />
         </div>

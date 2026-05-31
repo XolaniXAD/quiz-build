@@ -176,7 +176,7 @@ export default function DashboardPage({ onEditQuiz, onNavigate }) {
               <QuizCard
                 key={q.id}
                 quiz={q}
-                onEdit={onEditQuiz ?? (() => {})}
+                onEdit={(quiz) => (onEditQuiz ?? (() => {}))(quiz.id)}
                 onDelete={handleDelete}
                 onDuplicate={handleDuplicate}
               />
@@ -198,7 +198,7 @@ export default function DashboardPage({ onEditQuiz, onNavigate }) {
               <QuizListItem
                 key={q.id}
                 quiz={q}
-                onEdit={onEditQuiz ?? (() => {})}
+                onEdit={(quiz) => (onEditQuiz ?? (() => {}))(quiz.id)}
                 onDelete={handleDelete}
                 onDuplicate={handleDuplicate}
               />

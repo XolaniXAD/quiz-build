@@ -1,47 +1,86 @@
 /**
  * src/pages/QuizEditPage.jsx — quiz creation / editing page
  * ─────────────────────────────────────────────────────────
- * Props: { onNavigate(target: string) }
+ * Props:
+ *   quizId:          number|null  — if provided, loads existing quiz from DB;
+ *                                   if null, creates a brand-new quiz on mount
+ *   onQuizCreated:   (id) => void — called once after a new quiz row is created,
+ *                                   so App.jsx can persist the id to localStorage
+ *   onNavigate:      (target) => void
  *
  * Lifecycle:
- *   mount  → createQuiz()     → stores quizId in state
- *   title  → updateQuiz()     (debounced TITLE_SAVE_DELAY_MS ms)
- *   + btn  → createQuestion() → appends to questions state
- *   delete → deleteQuestion() → optimistic remove from state
- *   save   → updateQuestion() (called by RichTextEditor auto-save)
+ *   mount (quizId=null)  → createQuiz()          → stores quizId, calls onQuizCreated
+ *   mount (quizId given) → getQuiz(quizId)        → hydrates title + questions state
+ *   title change         → updateQuiz()           (debounced TITLE_SAVE_DELAY_MS ms)
+ *   + button             → createQuestion()       → appends to questions state
+ *   delete               → deleteQuestion()       → optimistic remove from state
+ *   editor change        → updateQuestion()       (called by RichTextEditor auto-save)
  *
  * Child components:
  *   <TopBar>             — fixed navigation bar at top
  *   <QuestionTypePicker> — overlay to pick question type when adding
  *   <QuestionCard>       — one per question, contains its <RichTextEditor>
- *
- * NOTE: quizId starts null — "Add Question" button is disabled until
- *       createQuiz() resolves and quizId is set.
  */
 import { useState, useEffect, useRef } from 'react'
 import TopBar from '../components/TopBar'
 import QuestionTypePicker from '../components/QuestionTypePicker'
 import QuestionCard from '../components/QuestionCard'
-import { createQuiz, updateQuiz, createQuestion, deleteQuestion, updateQuestion } from '../api/index'
+import { createQuiz, getQuiz, updateQuiz, createQuestion, deleteQuestion, updateQuestion } from '../api/index'
 import { TITLE_SAVE_DELAY_MS } from '../constants'
 
-export default function QuizEditPage({ onNavigate }) {
+export default function QuizEditPage({ quizId: initialQuizId = null, onQuizCreated, onNavigate }) {
   const [questions,  setQuestions]  = useState([])
   const [title,      setTitle]      = useState('Untitled Quiz')
   const [showPicker, setShowPicker] = useState(false)
   const [quizId,     setQuizId]     = useState(null)
-  const titleTimerRef = useRef(null)
+  const [loading,    setLoading]    = useState(true)
+  const titleTimerRef    = useRef(null)
+  // Tracks whether the title was changed by the user (not just loaded from DB).
+  // Prevents a spurious PUT /quizzes/:id on initial load.
+  const userEditedTitleRef = useRef(false)
 
-  // Create the quiz row in DB immediately on mount
+  // On mount: load existing quiz OR create a new one
   useEffect(() => {
-    createQuiz('Untitled Quiz')
-      .then((q) => setQuizId(q.id))
-      .catch(console.error)
-  }, [])
+    userEditedTitleRef.current = false // reset on every quiz switch
+    if (initialQuizId) {
+      // Load existing quiz — hydrate title and questions from DB
+      getQuiz(initialQuizId)
+        .then((quiz) => {
+          setQuizId(quiz.id)
+          setTitle(quiz.title)
+          setQuestions(
+            (quiz.questions || []).map((q) => ({
+              id:      q.id,
+              type:    q.type || 'multiple_choice',
+              // Only pass a valid TipTap doc; null → RichTextEditor shows empty
+              content: q.content?.type === 'doc' ? q.content : null,
+            }))
+          )
+        })
+        .catch((err) => {
+          // Quiz no longer exists (deleted externally) — fall back to new
+          console.warn('Could not load quiz, creating new one:', err)
+          return createQuiz('Untitled Quiz').then((q) => {
+            setQuizId(q.id)
+            onQuizCreated?.(q.id)
+          })
+        })
+        .finally(() => setLoading(false))
+    } else {
+      // Create a brand-new quiz row immediately
+      createQuiz('Untitled Quiz')
+        .then((q) => {
+          setQuizId(q.id)
+          onQuizCreated?.(q.id)
+        })
+        .catch(console.error)
+        .finally(() => setLoading(false))
+    }
+  }, [initialQuizId])
 
-  // Debounce-save title whenever it changes (skips if quizId not yet set)
+  // Debounce-save title — only when the user actually edits it, not on load
   useEffect(() => {
-    if (!quizId) return
+    if (!quizId || !userEditedTitleRef.current) return
     if (titleTimerRef.current) clearTimeout(titleTimerRef.current)
     titleTimerRef.current = setTimeout(() => {
       updateQuiz(quizId, { title }).catch(console.error)
@@ -76,6 +115,14 @@ export default function QuizEditPage({ onNavigate }) {
 
   const isEmpty = questions.length === 0
 
+  if (loading) {
+    return (
+      <div className="font-body-md text-on-background bg-slate-50 min-h-screen flex items-center justify-center">
+        <span className="material-symbols-outlined animate-spin text-4xl text-slate-400">progress_activity</span>
+      </div>
+    )
+  }
+
   return (
     <div className="font-body-md text-on-background bg-slate-50 min-h-screen">
       <TopBar onMenuToggle={null} onNavigate={onNavigate} />
@@ -85,7 +132,7 @@ export default function QuizEditPage({ onNavigate }) {
         <input
           type="text"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => { userEditedTitleRef.current = true; setTitle(e.target.value) }}
           className="text-2xl md:text-3xl font-bold text-slate-900 text-center border-b-2 border-transparent hover:border-slate-200 focus:border-primary-container focus:outline-none bg-transparent mb-10 w-full transition-colors"
         />
 
