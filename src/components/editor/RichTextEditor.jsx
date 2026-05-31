@@ -29,6 +29,7 @@
  *     @tiptap/extension-text-style. Do NOT use a custom FontSize extension —
  *     it will conflict with the built-in and break setFontSize.
  */
+import { closeHistory } from 'prosemirror-history'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import TextAlign from '@tiptap/extension-text-align'
@@ -92,6 +93,15 @@ export default function RichTextEditor({ questionId, initialContent, onSave }) {
       attributes: { class: 'quiz-editor-content' },
       handleKeyDown: (_view, event) => {
         const mod = event.ctrlKey || event.metaKey
+        // Close the current history group before every character/backspace/delete
+        // so each keystroke gets its own undo step (newGroupDelay alone is unreliable
+        // on Windows due to 15 ms timer resolution).
+        if (
+          !mod && !event.altKey &&
+          (event.key.length === 1 || event.key === 'Backspace' || event.key === 'Delete')
+        ) {
+          _view.dispatch(closeHistory(_view.state.tr))
+        }
         // Plain Enter — let TipTap split the block normally, then strip any
         // inherited text alignment from the new paragraph so it starts at left.
         if (event.key === 'Enter' && !mod && !event.shiftKey && !event.altKey) {
