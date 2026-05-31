@@ -19,7 +19,7 @@
  *   EDITOR_FONT_SIZES            — font size list (from src/constants.js)
  *   EDITOR_DEFAULT_FONT_SIZE     — fallback when no fontSize mark is active
  */
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { EDITOR_FONT_SIZES, EDITOR_DEFAULT_FONT_SIZE } from '../../constants'
 
@@ -62,8 +62,19 @@ const BULLET_TYPES = [
 ]
 
 function BulletDropdown({ editor }) {
-  const [open, setOpen] = useState(false)
+  const [open,     setOpen]     = useState(false)
+  const [panelPos, setPanelPos] = useState({ top: 0, left: 0 })
+  const btnRef   = useRef(null)
   const isActive = editor.isActive('bulletList')
+
+  function toggleOpen(e) {
+    e.preventDefault()
+    if (!open) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setPanelPos({ top: rect.bottom + 4, left: rect.left })
+    }
+    setOpen((v) => !v)
+  }
 
   function apply(listType) {
     if (!isActive) {
@@ -77,7 +88,8 @@ function BulletDropdown({ editor }) {
   return (
     <div style={{ position: 'relative' }}>
       <button
-        onMouseDown={(e) => { e.preventDefault(); setOpen((v) => !v) }}
+        ref={btnRef}
+        onMouseDown={toggleOpen}
         title="Bullet list"
         style={{
           display: 'flex', alignItems: 'center', gap: 1,
@@ -92,15 +104,25 @@ function BulletDropdown({ editor }) {
         <span className="material-symbols-outlined" style={{ fontSize: 18 }}>format_list_bulleted</span>
         <span className="material-symbols-outlined" style={{ fontSize: 14 }}>arrow_drop_down</span>
       </button>
-      {open && (
+      {open && createPortal(
         <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onMouseDown={() => setOpen(false)} />
-          <DropPanel top={36}>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }} onMouseDown={() => setOpen(false)} />
+          <div style={{
+            position: 'fixed',
+            top: panelPos.top,
+            left: panelPos.left,
+            zIndex: 9999,
+            background: 'white', borderRadius: 10,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.13)',
+            border: '1px solid #e2e8f0', width: 160,
+            padding: '5px 0', overflow: 'hidden',
+          }}>
             {BULLET_TYPES.map((t) => (
               <DropItem key={t.id} preview={t.preview} label={t.label} onSelect={() => apply(t.id)} />
             ))}
-          </DropPanel>
-        </>
+          </div>
+        </>,
+        document.body,
       )}
     </div>
   )
@@ -116,8 +138,19 @@ const ORDERED_TYPES = [
 ]
 
 function OrderedDropdown({ editor }) {
-  const [open, setOpen] = useState(false)
+  const [open,     setOpen]     = useState(false)
+  const [panelPos, setPanelPos] = useState({ top: 0, left: 0 })
+  const btnRef   = useRef(null)
   const isActive = editor.isActive('orderedList')
+
+  function toggleOpen(e) {
+    e.preventDefault()
+    if (!open) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setPanelPos({ top: rect.bottom + 4, left: rect.left })
+    }
+    setOpen((v) => !v)
+  }
 
   function apply(listType) {
     if (!isActive) {
@@ -131,7 +164,8 @@ function OrderedDropdown({ editor }) {
   return (
     <div style={{ position: 'relative' }}>
       <button
-        onMouseDown={(e) => { e.preventDefault(); setOpen((v) => !v) }}
+        ref={btnRef}
+        onMouseDown={toggleOpen}
         title="Ordered list"
         style={{
           display: 'flex', alignItems: 'center', gap: 1,
@@ -146,15 +180,25 @@ function OrderedDropdown({ editor }) {
         <span className="material-symbols-outlined" style={{ fontSize: 18 }}>format_list_numbered</span>
         <span className="material-symbols-outlined" style={{ fontSize: 14 }}>arrow_drop_down</span>
       </button>
-      {open && (
+      {open && createPortal(
         <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onMouseDown={() => setOpen(false)} />
-          <DropPanel top={36}>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }} onMouseDown={() => setOpen(false)} />
+          <div style={{
+            position: 'fixed',
+            top: panelPos.top,
+            left: panelPos.left,
+            zIndex: 9999,
+            background: 'white', borderRadius: 10,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.13)',
+            border: '1px solid #e2e8f0', width: 170,
+            padding: '5px 0', overflow: 'hidden',
+          }}>
             {ORDERED_TYPES.map((t) => (
               <DropItem key={t.id} preview={t.preview} label={t.label} onSelect={() => apply(t.id)} />
             ))}
-          </DropPanel>
-        </>
+          </div>
+        </>,
+        document.body,
       )}
     </div>
   )
@@ -612,5 +656,385 @@ export default function EditorToolbar({ editor, onImageFile, onImageUrl, saveSta
       {/* Save status — pushed to far right */}
       <SaveBadge status={saveStatus} />
     </div>
+  )
+}
+
+// ── Floating Selection Toolbar ────────────────────────────────────────────────
+// Dark pill that appears above (or below) highlighted text, giving quick access
+// to common formatting tools without requiring the user to scroll to the toolbar.
+// Renders via createPortal so it is never clipped by any parent overflow.
+
+function FloatBtn({ icon, title, active, onClick }) {
+  return (
+    <button
+      title={title}
+      onMouseDown={(e) => { e.preventDefault(); onClick() }}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        width: 30, height: 30, borderRadius: 6, border: 'none', cursor: 'pointer', flexShrink: 0,
+        background: active ? 'rgba(255,255,255,0.18)' : 'transparent',
+        color: active ? '#fff' : 'rgba(255,255,255,0.82)',
+        transition: 'background 0.1s',
+      }}
+      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = active ? 'rgba(255,255,255,0.18)' : 'transparent' }}
+    >
+      <span className="material-symbols-outlined" style={{ fontSize: 17 }}>{icon}</span>
+    </button>
+  )
+}
+
+function FloatSep() {
+  return (
+    <span style={{
+      width: 1, height: 18, flexShrink: 0, margin: '0 2px',
+      background: 'rgba(255,255,255,0.14)',
+    }} />
+  )
+}
+
+const FLOAT_MINI_COLORS = [
+  '#000000', '#374151', '#dc2626', '#d97706',
+  '#16a34a', '#2463eb', '#7c3aed', '#ffffff',
+]
+
+const FLOAT_TOOLBAR_W = 424
+
+export function FloatingSelectionToolbar({ editor }) {
+  const [pos,         setPos]         = useState(null)   // { top, left, arrowX, arrowBelow } | null
+  const [colorOpen,   setColorOpen]   = useState(false)
+  const [bulletOpen,  setBulletOpen]  = useState(false)
+  const [orderedOpen, setOrderedOpen] = useState(false)
+
+  useEffect(() => {
+    if (!editor) return
+
+    function update() {
+      const sel = editor.state.selection
+      // Hide for cursor-only or node selections (e.g. a selected image)
+      if (sel.empty || sel.node) { setPos(null); setColorOpen(false); return }
+
+      const domSel = window.getSelection()
+      if (!domSel || domSel.rangeCount === 0) { setPos(null); return }
+
+      const rect = domSel.getRangeAt(0).getBoundingClientRect()
+      if (!rect.width && !rect.height) { setPos(null); return }
+
+      const TOOLBAR_H = 44
+      const GAP       = 10
+
+      // Center toolbar over selection, clamped to viewport
+      const rawLeft = rect.left + rect.width / 2 - FLOAT_TOOLBAR_W / 2
+      const left    = Math.max(8, Math.min(rawLeft, window.innerWidth - FLOAT_TOOLBAR_W - 8))
+
+      // Arrow X: points at the center of the selection
+      const arrowX = Math.max(14, Math.min(rect.left + rect.width / 2 - left, FLOAT_TOOLBAR_W - 14))
+
+      // Show below if selection is too close to the top of the viewport
+      const arrowBelow = rect.top < TOOLBAR_H + GAP + 12
+      const top = arrowBelow ? rect.bottom + GAP : rect.top - TOOLBAR_H - GAP
+
+      setPos({ top, left, arrowX, arrowBelow })
+    }
+
+    function hide() { setPos(null); setColorOpen(false); setBulletOpen(false); setOrderedOpen(false) }
+
+    editor.on('selectionUpdate', update)
+    editor.on('blur', hide)
+    // Scrolling makes the stored coords stale — just hide and let re-selection reposition
+    document.addEventListener('scroll', hide, { capture: true, passive: true })
+    window.addEventListener('resize', hide)
+
+    return () => {
+      editor.off('selectionUpdate', update)
+      editor.off('blur', hide)
+      document.removeEventListener('scroll', hide, { capture: true })
+      window.removeEventListener('resize', hide)
+    }
+  }, [editor])
+
+  if (!pos || !editor) return null
+
+  const { top, left, arrowX, arrowBelow } = pos
+  const curColor = editor.getAttributes('textStyle').color || '#000000'
+
+  function changeSize(dir) {
+    const curSize = parseInt(editor.getAttributes('textStyle').fontSize) || EDITOR_DEFAULT_FONT_SIZE
+    let idx = EDITOR_FONT_SIZES.indexOf(curSize)
+    if (idx === -1) {
+      // Snap to nearest known size
+      idx = EDITOR_FONT_SIZES.reduce(
+        (best, s, i) => Math.abs(s - curSize) < Math.abs(EDITOR_FONT_SIZES[best] - curSize) ? i : best, 0,
+      )
+    }
+    const nextIdx  = dir === 'up' ? Math.min(idx + 1, EDITOR_FONT_SIZES.length - 1) : Math.max(idx - 1, 0)
+    const nextSize = EDITOR_FONT_SIZES[nextIdx]
+    const { from, to } = editor.state.selection
+    const mt = editor.state.schema.marks.textStyle
+    if (mt && from !== to) {
+      editor.view.dispatch(editor.state.tr.addMark(from, to, mt.create({ fontSize: `${nextSize}px` })))
+    }
+  }
+
+  const sharedArrow = {
+    position: 'absolute', left: arrowX, transform: 'translateX(-50%)',
+    width: 0, height: 0,
+    borderLeft: '6px solid transparent', borderRight: '6px solid transparent',
+  }
+
+  return createPortal(
+    <>
+      {/* Full-screen backdrop to close any open dropdown — z-index below the toolbar */}
+      {(colorOpen || bulletOpen || orderedOpen) && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9999 }}
+          onMouseDown={() => { setColorOpen(false); setBulletOpen(false); setOrderedOpen(false) }}
+        />
+      )}
+
+      <div
+        onMouseDown={(e) => e.preventDefault()}
+        style={{
+          position: 'fixed', top, left, zIndex: 10000,
+          fontFamily: 'Inter, sans-serif',
+          animation: `${arrowBelow ? 'floatInBelow' : 'floatIn'} 0.13s ease`,
+          pointerEvents: 'auto',
+        }}
+      >
+        {/* Arrow pointing UP — toolbar is below the selection */}
+        {arrowBelow && (
+          <div style={{ ...sharedArrow, top: -6, borderBottom: '6px solid #1e293b' }} />
+        )}
+
+        {/* Main dark pill */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 1,
+          height: 44, padding: '0 6px', boxSizing: 'border-box',
+          background: '#1e293b', borderRadius: 10,
+          boxShadow: '0 6px 24px rgba(0,0,0,0.4)',
+          border: '1px solid rgba(255,255,255,0.07)',
+        }}>
+
+          {/* Font size — A– decrease and A+ increase */}
+          {[
+            { dir: 'down', big: 13, small: '–', title: 'Decrease font size' },
+            { dir: 'up',   big: 16, small: '+', title: 'Increase font size'  },
+          ].map(({ dir, big, small, title }) => (
+            <button
+              key={dir}
+              title={title}
+              onMouseDown={(e) => { e.preventDefault(); changeSize(dir) }}
+              style={{
+                display: 'inline-flex', alignItems: 'flex-end', justifyContent: 'center',
+                width: 30, height: 30, borderRadius: 6, border: 'none', cursor: 'pointer',
+                flexShrink: 0, gap: 0, paddingBottom: 3,
+                background: 'transparent', color: 'rgba(255,255,255,0.82)',
+                fontFamily: 'Inter, sans-serif',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            >
+              <span style={{ fontSize: big, fontWeight: 700, lineHeight: 1 }}>A</span>
+              <span style={{ fontSize: 9,   fontWeight: 700, lineHeight: 1, marginBottom: 1 }}>{small}</span>
+            </button>
+          ))}
+
+          <FloatSep />
+
+          <FloatBtn icon="format_bold"   title="Bold (Ctrl+B)"   active={editor.isActive('bold')}      onClick={() => editor.chain().focus().toggleBold().run()} />
+          <FloatBtn icon="format_italic" title="Italic (Ctrl+I)" active={editor.isActive('italic')}    onClick={() => editor.chain().focus().toggleItalic().run()} />
+          <FloatBtn icon="highlight"     title="Highlight"       active={editor.isActive('highlight')} onClick={() => editor.chain().focus().toggleHighlight().run()} />
+
+          <FloatSep />
+
+          {/* Text color with mini palette */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button
+              title="Text color"
+              onMouseDown={(e) => { e.preventDefault(); setColorOpen((v) => !v) }}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                width: 30, height: 30, borderRadius: 6, border: 'none', cursor: 'pointer',
+                gap: 1, padding: '3px 6px', boxSizing: 'border-box',
+                background: colorOpen ? 'rgba(255,255,255,0.18)' : 'transparent',
+                color: 'rgba(255,255,255,0.82)',
+              }}
+              onMouseEnter={(e) => { if (!colorOpen) e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+              onMouseLeave={(e) => { if (!colorOpen) e.currentTarget.style.background = colorOpen ? 'rgba(255,255,255,0.18)' : 'transparent' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 17, lineHeight: 1 }}>format_color_text</span>
+              <span style={{
+                width: 14, height: 3, borderRadius: 2,
+                background: curColor === '#ffffff' ? 'rgba(255,255,255,0.5)' : curColor,
+              }} />
+            </button>
+
+            {colorOpen && (
+              <div style={{
+                position: 'absolute', top: 34, left: '50%', transform: 'translateX(-50%)',
+                zIndex: 10001,
+                background: '#1e293b', borderRadius: 8,
+                boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                padding: 6,
+              }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
+                  {FLOAT_MINI_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      title={c}
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        editor.chain().focus().setColor(c).run()
+                        setColorOpen(false)
+                      }}
+                      style={{
+                        width: 20, height: 20, borderRadius: 4, padding: 0, cursor: 'pointer',
+                        background: c, boxSizing: 'border-box',
+                        border: curColor === c
+                          ? '2px solid #60a5fa'
+                          : c === '#ffffff' ? '1px solid rgba(255,255,255,0.3)' : '1px solid rgba(0,0,0,0.12)',
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <FloatSep />
+
+          <FloatBtn icon="format_align_left"   title="Align left"   active={editor.isActive({ textAlign: 'left' })}   onClick={() => editor.chain().focus().setTextAlign('left').run()} />
+          <FloatBtn icon="format_align_center" title="Align center" active={editor.isActive({ textAlign: 'center' })} onClick={() => editor.chain().focus().setTextAlign('center').run()} />
+          <FloatBtn icon="format_align_right"  title="Align right"  active={editor.isActive({ textAlign: 'right' })}  onClick={() => editor.chain().focus().setTextAlign('right').run()} />
+
+          <FloatSep />
+
+          {/* Bullet list dropdown */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button
+              title="Bullet list"
+              onMouseDown={(e) => { e.preventDefault(); setBulletOpen((v) => !v); setOrderedOpen(false); setColorOpen(false) }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                height: 30, padding: '0 3px 0 5px', borderRadius: 6, border: 'none',
+                cursor: 'pointer', flexShrink: 0, gap: 0,
+                background: bulletOpen || editor.isActive('bulletList') ? 'rgba(255,255,255,0.18)' : 'transparent',
+                color: 'rgba(255,255,255,0.82)',
+              }}
+              onMouseEnter={(e) => { if (!bulletOpen && !editor.isActive('bulletList')) e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+              onMouseLeave={(e) => { if (!bulletOpen && !editor.isActive('bulletList')) e.currentTarget.style.background = 'transparent' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 17 }}>format_list_bulleted</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>{arrowBelow ? 'arrow_drop_down' : 'arrow_drop_up'}</span>
+            </button>
+            {bulletOpen && (
+              <div style={{
+                position: 'absolute',
+                ...(arrowBelow ? { top: 34 } : { bottom: 34 }),
+                left: '50%', transform: 'translateX(-50%)',
+                zIndex: 10001,
+                background: '#1e293b', borderRadius: 8,
+                boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                padding: '4px 0', minWidth: 140,
+              }}>
+                {BULLET_TYPES.map((t) => (
+                  <button
+                    key={t.id}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      if (!editor.isActive('bulletList')) {
+                        editor.chain().focus().toggleBulletList().updateAttributes('bulletList', { listType: t.id }).run()
+                      } else {
+                        editor.chain().focus().updateAttributes('bulletList', { listType: t.id }).run()
+                      }
+                      setBulletOpen(false)
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      width: '100%', padding: '7px 12px',
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'rgba(255,255,255,0.85)', fontSize: 12,
+                      fontFamily: 'Inter, sans-serif', textAlign: 'left',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'none' }}
+                  >
+                    <span style={{ width: 18, textAlign: 'center', fontSize: 13 }}>{t.preview}</span>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Ordered list dropdown */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button
+              title="Ordered list"
+              onMouseDown={(e) => { e.preventDefault(); setOrderedOpen((v) => !v); setBulletOpen(false); setColorOpen(false) }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                height: 30, padding: '0 3px 0 5px', borderRadius: 6, border: 'none',
+                cursor: 'pointer', flexShrink: 0, gap: 0,
+                background: orderedOpen || editor.isActive('orderedList') ? 'rgba(255,255,255,0.18)' : 'transparent',
+                color: 'rgba(255,255,255,0.82)',
+              }}
+              onMouseEnter={(e) => { if (!orderedOpen && !editor.isActive('orderedList')) e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+              onMouseLeave={(e) => { if (!orderedOpen && !editor.isActive('orderedList')) e.currentTarget.style.background = 'transparent' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 17 }}>format_list_numbered</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>{arrowBelow ? 'arrow_drop_down' : 'arrow_drop_up'}</span>
+            </button>
+            {orderedOpen && (
+              <div style={{
+                position: 'absolute',
+                ...(arrowBelow ? { top: 34 } : { bottom: 34 }),
+                left: '50%', transform: 'translateX(-50%)',
+                zIndex: 10001,
+                background: '#1e293b', borderRadius: 8,
+                boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                padding: '4px 0', minWidth: 160,
+              }}>
+                {ORDERED_TYPES.map((t) => (
+                  <button
+                    key={t.id}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      if (!editor.isActive('orderedList')) {
+                        editor.chain().focus().toggleOrderedList().updateAttributes('orderedList', { listType: t.id }).run()
+                      } else {
+                        editor.chain().focus().updateAttributes('orderedList', { listType: t.id }).run()
+                      }
+                      setOrderedOpen(false)
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      width: '100%', padding: '7px 12px',
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'rgba(255,255,255,0.85)', fontSize: 12,
+                      fontFamily: 'Inter, sans-serif', textAlign: 'left',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'none' }}
+                  >
+                    <span style={{ width: 18, textAlign: 'center', fontSize: 13 }}>{t.preview}</span>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Arrow pointing DOWN — toolbar is above the selection (normal case) */}
+        {!arrowBelow && (
+          <div style={{ ...sharedArrow, bottom: -6, borderTop: '6px solid #1e293b' }} />
+        )}
+      </div>
+    </>,
+    document.body,
   )
 }

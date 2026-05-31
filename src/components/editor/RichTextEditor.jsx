@@ -39,7 +39,7 @@ import { Color } from '@tiptap/extension-color'
 import { useEffect, useState, useRef } from 'react'
 import { ResizableImage } from './extensions/ResizableImage'
 import { CustomBulletList, CustomOrderedList } from './extensions/CustomLists'
-import EditorToolbar from './EditorToolbar'
+import EditorToolbar, { FloatingSelectionToolbar } from './EditorToolbar'
 import ImageCropModal from './ImageCropModal'
 import { EditorContext } from './EditorContext'
 import { uploadImages } from '../../api/index'
@@ -104,6 +104,40 @@ export default function RichTextEditor({ questionId, initialContent, onSave }) {
           }, 0)
           return false // let TipTap's own Enter handler run
         }
+        // Tab / Shift+Tab — indent or outdent 4 spaces (VS Code style)
+        if (event.key === 'Tab') {
+          event.preventDefault()
+          const { state, dispatch } = _view
+          const { from, to, empty } = state.selection
+          const indent = !event.shiftKey
+
+          if (empty && indent) {
+            // Cursor only + Tab: just insert 4 spaces at the caret
+            editor.commands.insertContent('    ')
+            return true
+          }
+
+          // Selection, or Shift+Tab on cursor: add/remove 4 spaces at start of each block
+          const tr = state.tr
+          state.doc.nodesBetween(from, to, (node, pos) => {
+            if (!node.isTextblock) return true
+            const blockStart = pos + 1 // first char position inside the block
+            if (indent) {
+              tr.insertText('    ', tr.mapping.map(blockStart))
+            } else {
+              const leading = node.textContent.match(/^ */)[0].length
+              const spaces = Math.min(4, leading)
+              if (spaces > 0) {
+                const s = tr.mapping.map(blockStart)
+                tr.delete(s, s + spaces)
+              }
+            }
+            return false // don't descend into children of this block
+          })
+          dispatch(tr)
+          return true
+        }
+
         if (!mod) return false
         const key = event.key.toLowerCase()
         // Ctrl/Cmd + A — select all content in the editor
@@ -191,6 +225,7 @@ export default function RichTextEditor({ questionId, initialContent, onSave }) {
           saveStatus={saveStatus}
         />
         <EditorContent editor={editor} />
+        <FloatingSelectionToolbar editor={editor} />
       </div>
 
       {cropState && (
