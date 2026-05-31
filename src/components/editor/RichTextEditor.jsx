@@ -77,7 +77,7 @@ export default function RichTextEditor({ questionId, initialContent, onSave }) {
     extensions: [
       StarterKit.configure({ bulletList: false, orderedList: false }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
-      Highlight,
+      Highlight.configure({ multicolor: true }),
       TextStyle,   // must come before Color + FontSize (they extend it)
       Color,
       FontSize,

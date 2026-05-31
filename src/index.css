@@ -44,7 +44,8 @@ body {
 
 .quiz-editor-content strong { font-weight: 700; }
 .quiz-editor-content em     { font-style: italic; }
-.quiz-editor-content mark   { background: #fef08a; padding: 1px 3px; border-radius: 3px; }
+.quiz-editor-content mark:not([data-color]) { background: #fef08a; padding: 1px 3px; border-radius: 3px; }
+.quiz-editor-content mark[data-color]        { padding: 1px 3px; border-radius: 3px; }
 
 /* Placeholder */
 .quiz-editor-content .is-editor-empty:first-child::before {
