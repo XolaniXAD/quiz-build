@@ -456,10 +456,20 @@ const COLOR_SWATCHES = [
 ]
 
 function FontColorPicker({ editor }) {
-  const [open, setOpen] = useState(false)
-  const nativeRef = useRef(null)
+  const [open,     setOpen]     = useState(false)
+  const [panelPos, setPanelPos] = useState({ top: 0, left: 0 })
+  const btnRef = useRef(null)
 
   const current = editor.getAttributes('textStyle').color || '#000000'
+
+  function toggleOpen(e) {
+    e.preventDefault()
+    if (!open) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setPanelPos({ top: rect.bottom + 4, left: rect.left })
+    }
+    setOpen((v) => !v)
+  }
 
   function apply(color) {
     editor.chain().focus().setColor(color).run()
@@ -469,7 +479,8 @@ function FontColorPicker({ editor }) {
   return (
     <div style={{ position: 'relative' }}>
       <button
-        onMouseDown={(e) => { e.preventDefault(); setOpen((v) => !v) }}
+        ref={btnRef}
+        onMouseDown={toggleOpen}
         title="Font color"
         style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -482,15 +493,18 @@ function FontColorPicker({ editor }) {
         <span className="material-symbols-outlined" style={{ fontSize: 17, color: '#475569', lineHeight: 1 }}>format_color_text</span>
         <span style={{ width: 16, height: 3, borderRadius: 2, background: current }} />
       </button>
-      {open && (
+      {open && createPortal(
         <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onMouseDown={() => setOpen(false)} />
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }} onMouseDown={() => setOpen(false)} />
           <div style={{
-            position: 'absolute', top: 36, left: 0, zIndex: 50,
+            position: 'fixed',
+            top: panelPos.top,
+            left: panelPos.left,
+            zIndex: 9999,
             background: 'white', borderRadius: 10,
             boxShadow: '0 4px 20px rgba(0,0,0,0.13)',
             border: '1px solid #e2e8f0', padding: '10px',
-            width: 156,
+            width: 160,
           }}>
             {/* Swatch grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4, marginBottom: 8 }}>
@@ -508,18 +522,19 @@ function FontColorPicker({ editor }) {
               ))}
             </div>
             {/* Custom color */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingTop: 6, borderTop: '1px solid #f1f5f9' }}>
               <input
-                ref={nativeRef}
                 type="color"
-                value={current}
+                defaultValue={current}
+                onMouseDown={(e) => e.stopPropagation()}
+                onInput={(e) => editor.chain().setColor(e.target.value).run()}
                 style={{ width: 28, height: 28, padding: 0, border: 'none', borderRadius: 4, cursor: 'pointer', background: 'none' }}
-                onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
               />
               <span style={{ fontSize: 11, color: '#94a3b8' }}>Custom…</span>
             </div>
           </div>
-        </>
+        </>,
+        document.body,
       )}
     </div>
   )
@@ -837,6 +852,8 @@ export function FloatingSelectionToolbar({ editor }) {
   const [highlightOpen, setHighlightOpen] = useState(false)
   const [bulletOpen,    setBulletOpen]    = useState(false)
   const [orderedOpen,   setOrderedOpen]   = useState(false)
+  const colorCustomRef = useRef(null)
+  const hlCustomRef    = useRef(null)
 
   useEffect(() => {
     if (!editor) return
@@ -1032,20 +1049,13 @@ export function FloatingSelectionToolbar({ editor }) {
                   ))}
                 </div>
                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 5 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'rgba(255,255,255,0.7)', cursor: 'pointer' }}>
-                    <input
-                      type="color"
-                      defaultValue="#fef08a"
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onInput={(e) => {
-                        const { from, to } = editor.state.selection
-                        const mt = editor.state.schema.marks.highlight
-                        if (mt && from !== to) editor.view.dispatch(editor.state.tr.addMark(from, to, mt.create({ color: e.target.value })))
-                      }}
-                      style={{ width: 20, height: 20, border: 'none', padding: 0, cursor: 'pointer', borderRadius: 3 }}
-                    />
-                    Custom
-                  </label>
+                  <button
+                    onMouseDown={(e) => { e.preventDefault(); hlCustomRef.current?.click() }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '3px 0', fontSize: 11, color: 'rgba(255,255,255,0.7)', fontFamily: 'Inter, sans-serif' }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>colorize</span>
+                    Custom…
+                  </button>
                   {editor.isActive('highlight') && (
                     <button
                       onMouseDown={(e) => {
@@ -1071,6 +1081,17 @@ export function FloatingSelectionToolbar({ editor }) {
                 </div>
               </div>
             )}
+            <input
+              ref={hlCustomRef}
+              type="color"
+              defaultValue="#fef08a"
+              style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', opacity: 0, padding: 0, border: 0 }}
+              onInput={(e) => {
+                const { from, to } = editor.state.selection
+                const mt = editor.state.schema.marks.highlight
+                if (mt && from !== to) editor.view.dispatch(editor.state.tr.addMark(from, to, mt.create({ color: e.target.value })))
+              }}
+            />
           </div>
 
           <FloatSep />
@@ -1126,8 +1147,24 @@ export function FloatingSelectionToolbar({ editor }) {
                     />
                   ))}
                 </div>
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 5, marginTop: 4 }}>
+                  <button
+                    onMouseDown={(e) => { e.preventDefault(); colorCustomRef.current?.click() }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '3px 0', fontSize: 11, color: 'rgba(255,255,255,0.7)', fontFamily: 'Inter, sans-serif' }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>colorize</span>
+                    Custom…
+                  </button>
+                </div>
               </div>
             )}
+            <input
+              ref={colorCustomRef}
+              type="color"
+              defaultValue={curColor}
+              style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', opacity: 0, padding: 0, border: 0 }}
+              onInput={(e) => editor.chain().setColor(e.target.value).run()}
+            />
           </div>
 
           <FloatSep />
