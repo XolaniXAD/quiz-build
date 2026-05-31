@@ -9,7 +9,7 @@
 
 | Layer      | Technology                         | Notes                                       |
 |------------|------------------------------------|---------------------------------------------|
-| Frontend   | React 18 + Vite 6                  | Port 5000, `strictPort: false`, auto-opens  |
+| Frontend   | React 18 + Vite 6                  | Port 5001, `strictPort: false`, auto-opens  |
 | Styling    | Tailwind CSS v3 (PostCSS plugin)   | Full custom Material Design token theme     |
 | Icons      | Material Symbols Outlined (Google) | Loaded via `<link>` in `index.html`         |
 | Font       | Inter (400–900, Google Fonts)      | Loaded via `<link>` in `index.html`         |
@@ -20,7 +20,7 @@
 
 ### Dev scripts
 ```
-npm run dev      → Vite frontend  (port 5000)
+npm run dev      → Vite frontend  (port 5001)  ← NOT 5000, that port was occupied
 npm run server   → Express API    (port 3001)
 npm run build    → Production build
 ```
@@ -42,7 +42,7 @@ PORT=3001
 ```
 /
 ├── index.html            ← Google Fonts + Material Symbols <link> tags, mounts #root
-├── vite.config.js        ← port 5000, proxy /api + /uploads → localhost:3001
+├── vite.config.js        ← port 5001 (NOT 5000), proxy /api + /uploads → localhost:3001
 ├── tailwind.config.js    ← Full custom color/spacing/font token definitions
 ├── postcss.config.js     ← Standard PostCSS (tailwindcss + autoprefixer)
 ├── package.json
@@ -78,7 +78,7 @@ PORT=3001
 │           └── extensions/
 │               ├── ResizableImage.jsx    ← TipTap node: resizable/draggable images, context menu
 │               ├── CustomLists.js        ← Extends BulletList + OrderedList with listType attribute
-│               └── FontSize.js           ← Custom TipTap extension for inline font-size
+│               └── FontSize.js           ← ⚠️ SUPERSEDED — use FontSize from @tiptap/extension-text-style
 │
 └── server/
     ├── index.js          ← Full Express REST API (see API section)
@@ -299,7 +299,7 @@ TextAlign   → types: ['heading', 'paragraph']
 Highlight
 TextStyle
 Color       (from @tiptap/extension-text-style)
-FontSize    (custom — FontSize.js)
+FontSize    (from @tiptap/extension-text-style — NOT the custom FontSize.js file)
 Placeholder → 'Type your question here, or paste / insert an image…'
 ResizableImage (custom node — ResizableImage.jsx)
 CustomBulletList  (custom — CustomLists.js)
@@ -388,10 +388,7 @@ Extends `BulletList` and `OrderedList` with a `listType` attribute.
 
 ### FontSize — `src/components/editor/extensions/FontSize.js`
 
-Custom TipTap `Extension` built on top of `TextStyle`.
-
-- Adds `fontSize` attribute to `textStyle` mark, renders as `style="font-size: Npx"`
-- Commands: `setFontSize(size)` / `unsetFontSize()`
+⚠️ **SUPERSEDED** — this file is no longer used. `FontSize` is imported from `@tiptap/extension-text-style` instead. Kept for reference only. Do not import from this file.
 
 ---
 
