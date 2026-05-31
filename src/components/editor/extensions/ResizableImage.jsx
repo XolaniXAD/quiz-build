@@ -205,7 +205,10 @@ function ResizableImageView({ node, updateAttributes, deleteNode, selected, edit
   const caretBefore = !selected && nodePos !== null && sel.empty && sel.from === nodePos
   const caretAfter  = !selected && nodePos !== null && sel.empty && sel.from === nodePos + 1
 
-  useEffect(() => () => { mountedRef.current = false }, [])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   useEffect(() => {
     if (!contextMenu) return

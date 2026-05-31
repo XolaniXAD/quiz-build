@@ -90,6 +90,22 @@ export default function RichTextEditor({ questionId, initialContent, onSave }) {
     onUpdate: ({ editor: e }) => scheduleAutoSave(e.getJSON()),
     editorProps: {
       attributes: { class: 'quiz-editor-content' },
+      handleKeyDown: (_view, event) => {
+        const mod = event.ctrlKey || event.metaKey
+        if (!mod) return false
+        const key = event.key.toLowerCase()
+        // Ctrl/Cmd + A — select all content in the editor
+        if (key === 'a') {
+          event.preventDefault()
+          editor?.commands.selectAll()
+          return true
+        }
+        // Ctrl/Cmd + C and X — let the browser fire the native copy/cut DOM
+        // events, which ProseMirror intercepts to serialise the selection to
+        // the clipboard (preserving rich-text formatting).
+        if (key === 'c' || key === 'x') return false
+        return false
+      },
       handlePaste: (_view, event) => {
         // Intercept image pastes → upload to server instead of embedding base64
         const items = event.clipboardData?.items
@@ -116,16 +132,29 @@ export default function RichTextEditor({ questionId, initialContent, onSave }) {
         type: 'resizableImage',
         attrs: { src: `/uploads/${img.filename}` },
       }).run()
+      // If the cursor is now at the end of its block (common after pasting
+      // an image into an empty paragraph or at the end of content), split
+      // the block so the user has an empty paragraph to type into below.
+      const { $to } = editor.state.selection
+      if ($to.pos === $to.end()) {
+        editor.commands.splitBlock()
+      }
     } catch (err) {
       console.error('Image upload failed', err)
     }
   }
 
   function handleImageUrl(url) {
-    editor?.chain().focus().insertContent({
+    if (!editor) return
+    editor.chain().focus().insertContent({
       type: 'resizableImage',
       attrs: { src: url },
     }).run()
+    // Same newline-after-image UX as handleImageFile
+    const { $to } = editor.state.selection
+    if ($to.pos === $to.end()) {
+      editor.commands.splitBlock()
+    }
   }
 
   // ── Crop modal ────────────────────────────────────────────────────────────
