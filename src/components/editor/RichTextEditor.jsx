@@ -92,6 +92,18 @@ export default function RichTextEditor({ questionId, initialContent, onSave }) {
       attributes: { class: 'quiz-editor-content' },
       handleKeyDown: (_view, event) => {
         const mod = event.ctrlKey || event.metaKey
+        // Plain Enter — let TipTap split the block normally, then strip any
+        // inherited text alignment from the new paragraph so it starts at left.
+        if (event.key === 'Enter' && !mod && !event.shiftKey && !event.altKey) {
+          setTimeout(() => {
+            if (!mountedRef.current || !editor) return
+            const { $from } = editor.state.selection
+            // Code blocks use Enter for newlines — don't touch them
+            if ($from.parent.type.spec.code) return
+            editor.commands.unsetTextAlign()
+          }, 0)
+          return false // let TipTap's own Enter handler run
+        }
         if (!mod) return false
         const key = event.key.toLowerCase()
         // Ctrl/Cmd + A — select all content in the editor
